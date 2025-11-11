@@ -3,16 +3,16 @@
     <h1>Enviar Foto de Etiqueta</h1>
 
     <form @submit.prevent="submitForm" class="upload-form">
-      <button type="button" @click="toggleCamera" class="take-picture-button">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <button type="button" @click="toggleCamera" class="take-picture-button" aria-label="Alternar cámara para tomar foto">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <circle cx="12" cy="13" r="4" stroke="currentColor" stroke-width="2"/>
         </svg>
         {{ showCamera ? 'Cerrar Cámara' : 'Tomar Foto' }}
       </button>
 
-      <label for="fileInput" class="file-label">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <label for="fileInput" class="file-label" tabindex="0" @keydown.enter="fileInput.click()" @keydown.space.prevent="fileInput.click()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -33,9 +33,9 @@
       <div v-if="fileName !== 'Ningún archivo seleccionado'" class="file-name">{{ fileName }}</div>
 
       <div v-if="previewImageUrl" class="image-preview">
-        <img :src="previewImageUrl" alt="Imagen capturada" @click="openImageZoom" class="preview-image">
-        <button @click="clearImage" class="clear-image-button">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <img :src="previewImageUrl" alt="Imagen capturada para análisis" @click="openImageZoom" class="preview-image" tabindex="0" @keydown.enter="openImageZoom" @keydown.space.prevent="openImageZoom">
+        <button @click="clearImage" class="clear-image-button" aria-label="Eliminar imagen">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
@@ -50,38 +50,38 @@
       </div>
 
       <!-- Modal de zoom de imagen -->
-      <div v-if="showImagePreview" class="image-zoom-modal" @click="closeImageZoom">
+      <div v-if="showImagePreview" class="image-zoom-modal" @click="closeImageZoom" role="dialog" aria-modal="true" aria-labelledby="zoom-title">
         <div class="zoom-modal-content" @click.stop>
-          <button @click="closeImageZoom" class="close-zoom-button">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <button @click="closeImageZoom" class="close-zoom-button" aria-label="Cerrar vista ampliada">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
               <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
-          <img :src="previewImageUrl" alt="Imagen ampliada" class="zoomed-image">
+          <img :src="previewImageUrl" alt="Imagen ampliada para revisión" class="zoomed-image" id="zoom-title">
         </div>
       </div>
 
       <!-- Modal de éxito -->
-      <div v-if="showSuccessModal" class="success-modal" @click="closeSuccessModal">
+      <div v-if="showSuccessModal" class="success-modal" @click="closeSuccessModal" role="dialog" aria-modal="true" aria-labelledby="success-title">
         <div class="success-modal-content" @click.stop>
           <div class="success-icon">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
               <circle cx="12" cy="12" r="10" fill="#48bb78" stroke="#48bb78" stroke-width="2"/>
               <path d="M8 12l2 2 4-4" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
-          <h3>¡Datos guardados exitosamente!</h3>
+          <h3 id="success-title">¡Datos guardados exitosamente!</h3>
           <p>Los datos han sido procesados y guardados correctamente.</p>
-          <button @click="closeSuccessModal" class="success-button">Continuar</button>
+          <button @click="closeSuccessModal" class="success-button" autofocus>Continuar</button>
         </div>
       </div>
 
-      <button type="submit" :disabled="isProcessing" class="submit-button">
-        <svg v-if="!isProcessing" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <button type="submit" :disabled="isProcessing" class="submit-button" :aria-label="isProcessing ? 'Procesando imagen...' : 'Enviar imagen para análisis'">
+        <svg v-if="!isProcessing" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="spinner">
+        <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="spinner" aria-hidden="true">
           <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" stroke-dasharray="31.416" stroke-dashoffset="31.416">
             <animate attributeName="stroke-dashoffset" dur="1s" repeatCount="indefinite" values="31.416;0"/>
           </circle>
@@ -93,6 +93,9 @@
     <div v-if="isProcessing" class="loader">
       <div class="spinner"></div>
       <span>Procesando imagen...</span>
+      <div class="progress-bar">
+        <div class="progress-fill"></div>
+      </div>
     </div>
 
     <EditModal
@@ -124,6 +127,9 @@ const previewImageUrl = ref('')
 const showSuccessModal = ref(false)
 let capturedImageFile = null
 
+// Estado para optimización de rendimiento
+const imageCache = new Map()
+
 const toggleCamera = () => {
   if (showCamera.value) {
     closeCamera()
@@ -145,15 +151,50 @@ const closeCamera = () => {
 const handleImageCaptured = (file) => {
   capturedImageFile = file
   fileName.value = `Imagen capturada: ${file.name}`
-  previewImageUrl.value = URL.createObjectURL(file)
+
+  // Optimizar carga de imagen con cache
+  const cacheKey = file.name + file.size
+  if (imageCache.has(cacheKey)) {
+    previewImageUrl.value = imageCache.get(cacheKey)
+  } else {
+    const url = URL.createObjectURL(file)
+    previewImageUrl.value = url
+    imageCache.set(cacheKey, url)
+  }
+
   closeCamera()
 }
 
 const handleFileChange = () => {
   if (fileInput.value.files.length > 0) {
     const file = fileInput.value.files[0]
+
+    // Validar tipo de archivo en selección
+    if (!file.type.startsWith('image/')) {
+      showError('Por favor, selecciona un archivo de imagen válido.')
+      fileInput.value.value = ''
+      return
+    }
+
+    // Validar tamaño del archivo
+    if (file.size > 10 * 1024 * 1024) {
+      showError('El archivo es demasiado grande. Máximo 10MB permitido.')
+      fileInput.value.value = ''
+      return
+    }
+
     fileName.value = file.name
-    previewImageUrl.value = URL.createObjectURL(file)
+
+    // Optimizar carga de imagen con cache
+    const cacheKey = file.name + file.size
+    if (imageCache.has(cacheKey)) {
+      previewImageUrl.value = imageCache.get(cacheKey)
+    } else {
+      const url = URL.createObjectURL(file)
+      previewImageUrl.value = url
+      imageCache.set(cacheKey, url)
+    }
+
     capturedImageFile = null
     closeCamera()
   } else {
@@ -165,7 +206,19 @@ const submitForm = async () => {
   const fileToSend = capturedImageFile || (fileInput.value.files.length > 0 ? fileInput.value.files[0] : null)
 
   if (!fileToSend) {
-    alert('Por favor, selecciona un archivo o captura una foto.')
+    showError('Por favor, selecciona un archivo o captura una foto.')
+    return
+  }
+
+  // Validar tipo de archivo
+  if (!fileToSend.type.startsWith('image/')) {
+    showError('Por favor, selecciona un archivo de imagen válido.')
+    return
+  }
+
+  // Validar tamaño del archivo (máximo 10MB)
+  if (fileToSend.size > 10 * 1024 * 1024) {
+    showError('El archivo es demasiado grande. Máximo 10MB permitido.')
     return
   }
 
@@ -189,7 +242,7 @@ const submitForm = async () => {
     showModal.value = true
 
   } catch (error) {
-    alert(`Ha ocurrido un error: ${error.message}`)
+    showError(`Ha ocurrido un error: ${error.message}`)
   } finally {
     isProcessing.value = false
   }
@@ -234,8 +287,18 @@ const resetApp = () => {
   capturedImageFile = null
   fileName.value = 'Ningún archivo seleccionado'
   showCamera.value = false
+
+  // Limpiar URLs de objetos para liberar memoria
+  if (previewImageUrl.value) {
+    URL.revokeObjectURL(previewImageUrl.value)
+  }
   previewImageUrl.value = ''
   showImagePreview.value = false
+
+  // Limpiar cache de imágenes periódicamente
+  if (imageCache.size > 10) {
+    imageCache.clear()
+  }
 }
 
 const openImageZoom = () => {
@@ -247,6 +310,10 @@ const closeImageZoom = () => {
 }
 
 const clearImage = () => {
+  // Limpiar URL de objeto para liberar memoria
+  if (previewImageUrl.value) {
+    URL.revokeObjectURL(previewImageUrl.value)
+  }
   previewImageUrl.value = ''
   if (fileInput.value) fileInput.value.value = ''
   capturedImageFile = null
@@ -261,6 +328,31 @@ const closeSuccessModal = () => {
   showSuccessModal.value = false
   resetApp() // Reseteamos la app después de cerrar el mensaje de éxito.
 }
+
+const showError = (message) => {
+  // Crear un toast de error más elegante
+  const toast = document.createElement('div')
+  toast.className = 'error-toast'
+  toast.innerHTML = `
+    <div class="error-content">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="10" fill="#ef4444" stroke="#ef4444" stroke-width="2"/>
+        <path d="M15 9l-6 6M9 9l6 6" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>${message}</span>
+    </div>
+  `
+  document.body.appendChild(toast)
+
+  // Animar entrada
+  setTimeout(() => toast.classList.add('show'), 10)
+
+  // Remover después de 5 segundos
+  setTimeout(() => {
+    toast.classList.remove('show')
+    setTimeout(() => document.body.removeChild(toast), 300)
+  }, 5000)
+}
 </script>
 
 <style scoped>
@@ -269,24 +361,26 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
   margin: 0;
-  padding: 50px 20px;
+  padding: 40px 20px;
   min-height: 100vh;
+  color: #2d3748;
 }
 
 .container {
   background-color: white;
   padding: 40px;
-  border-radius: 20px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  border-radius: 24px;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.05);
   text-align: center;
   width: 100%;
-  max-width: 500px;
+  max-width: 520px;
   position: relative;
   overflow: hidden;
   animation: slideUp 0.6s ease-out;
   margin-bottom: 20px;
+  backdrop-filter: blur(10px);
 }
 
 .camera-section {
@@ -317,10 +411,15 @@ body {
 }
 
 h1 {
-  color: #2d3748;
+  color: #1a202c;
   margin-bottom: 30px;
-  font-weight: 700;
-  font-size: 28px;
+  font-weight: 800;
+  font-size: 32px;
+  letter-spacing: -0.025em;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .upload-form {
@@ -334,42 +433,47 @@ h1 {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  padding: 16px 32px;
+  padding: 18px 32px;
   font-size: 16px;
   font-weight: 600;
-  border-radius: 12px;
+  border-radius: 14px;
   cursor: pointer;
   width: 100%;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
 }
 
 .take-picture-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(102, 126, 234, 0.4);
 }
 
 .file-label {
-  background-color: #f7fafc;
+  background-color: #f8fafc;
   color: #4a5568;
-  padding: 16px 32px;
-  border-radius: 12px;
+  padding: 18px 32px;
+  border-radius: 14px;
   cursor: pointer;
   display: inline-block;
   width: 100%;
   box-sizing: border-box;
   text-align: center;
-  border: 2px dashed #cbd5e0;
-  transition: all 0.3s ease;
+  border: 2px dashed #d1d5db;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-weight: 500;
+  position: relative;
+  overflow: hidden;
 }
 
 .file-label:hover {
-  background-color: #edf2f7;
+  background-color: #f1f5f9;
   border-color: #667eea;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
 }
 
 .file-input {
@@ -387,19 +491,20 @@ h1 {
   background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
   color: white;
   border: none;
-  padding: 16px 32px;
+  padding: 18px 32px;
   font-size: 16px;
   font-weight: 600;
-  border-radius: 12px;
+  border-radius: 14px;
   cursor: pointer;
-  margin-top: 20px;
+  margin-top: 24px;
   width: 100%;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 15px rgba(72, 187, 120, 0.2);
 }
 
 .submit-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px rgba(72, 187, 120, 0.3);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(72, 187, 120, 0.4);
 }
 
 .submit-button:disabled {
@@ -419,37 +524,66 @@ h1 {
 }
 
 .loader {
-  margin-top: 20px;
+  margin-top: 24px;
   color: #667eea;
   font-weight: 500;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 16px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 16px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
 }
 
 .loader .spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid #e2e8f0;
-  border-top: 2px solid #667eea;
+  width: 24px;
+  height: 24px;
+  border: 3px solid #e2e8f0;
+  border-top: 3px solid #667eea;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
 
+.progress-bar {
+  width: 200px;
+  height: 4px;
+  background: #e2e8f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  border-radius: 2px;
+  animation: progress 2s ease-in-out infinite;
+}
+
+@keyframes progress {
+  0% { width: 0%; }
+  50% { width: 70%; }
+  100% { width: 100%; }
+}
+
 .image-preview {
-  margin: 20px 0;
+  margin: 24px 0;
   position: relative;
   display: inline-block;
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.05);
   cursor: pointer;
-  transition: transform 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
 }
 
 .image-preview:hover {
-  transform: scale(1.02);
+  transform: scale(1.03) translateY(-2px);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.15);
 }
 
 .preview-image {
@@ -462,24 +596,27 @@ h1 {
 
 .clear-image-button {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  background: rgba(239, 68, 68, 0.9);
+  top: 12px;
+  right: 12px;
+  background: rgba(239, 68, 68, 0.95);
   color: white;
   border: none;
   border-radius: 50%;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+  backdrop-filter: blur(10px);
 }
 
 .clear-image-button:hover {
   background: rgba(239, 68, 68, 1);
   transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
 }
 
 .image-zoom-modal {
@@ -553,13 +690,14 @@ h1 {
   background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
   margin: auto;
   padding: 40px;
-  border-radius: 20px;
+  border-radius: 24px;
   width: 90%;
-  max-width: 400px;
+  max-width: 420px;
   text-align: center;
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05);
   animation: slideIn 0.4s ease-out;
   border: 1px solid rgba(72, 187, 120, 0.2);
+  backdrop-filter: blur(20px);
 }
 
 .success-icon {
@@ -602,18 +740,18 @@ h1 {
   background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
   color: white;
   border: none;
-  padding: 14px 32px;
+  padding: 16px 32px;
   font-size: 16px;
   font-weight: 600;
-  border-radius: 12px;
+  border-radius: 14px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 4px 15px rgba(72, 187, 120, 0.3);
 }
 
 .success-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(72, 187, 120, 0.4);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 30px rgba(72, 187, 120, 0.4);
 }
 
 /* Responsive para modal de éxito */
@@ -635,6 +773,36 @@ h1 {
     padding: 12px 24px;
     font-size: 15px;
   }
+}
+
+.error-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  padding: 16px 20px;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(239, 68, 68, 0.3);
+  z-index: 10000;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  max-width: 400px;
+  backdrop-filter: blur(10px);
+}
+
+.error-toast.show {
+  transform: translateX(0);
+}
+
+.error-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.error-content svg {
+  flex-shrink: 0;
 }
 
 /* Responsive */

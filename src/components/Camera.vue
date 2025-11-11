@@ -85,12 +85,13 @@ onUnmounted(() => {
 
 <style scoped>
 .camera-container {
-  margin-top: 20px;
+  margin-top: 24px;
   background-color: white;
-  border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.05);
   overflow: hidden;
   animation: cameraSlideIn 0.4s ease-out;
+  backdrop-filter: blur(10px);
 }
 
 @keyframes cameraSlideIn {
@@ -209,22 +210,23 @@ video {
   background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
   color: white;
   border: none;
-  padding: 16px 32px;
+  padding: 18px 32px;
   font-size: 16px;
   font-weight: 600;
-  border-radius: 12px;
+  border-radius: 14px;
   cursor: pointer;
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  transition: all 0.3s ease;
+  gap: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 15px rgba(72, 187, 120, 0.2);
 }
 
 .capture-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px rgba(72, 187, 120, 0.3);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(72, 187, 120, 0.4);
 }
 
 /* Responsive */

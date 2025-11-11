@@ -1,61 +1,71 @@
 <template>
-  <div v-if="show" class="modal-overlay" @click="closeModal">
+  <div v-if="show" class="modal-overlay" @click="closeModal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal-content" @click.stop>
       <div class="modal-header">
-        <h2>Confirmar Datos</h2>
+        <h2 id="modal-title">Confirmar Datos</h2>
       </div>
       <form @submit.prevent="saveData" class="edit-form">
         <div class="modal-body">
           <div class="form-group">
             <label for="cliente">Cliente</label>
-            <input v-model="formData.cliente" type="text" id="cliente">
+            <input v-model="formData.cliente" type="text" id="cliente" aria-describedby="cliente-help">
+            <small id="cliente-help" class="sr-only">Nombre del cliente</small>
           </div>
           <div class="form-group">
             <label for="origen">Origen</label>
-            <input v-model="formData.origen" type="text" id="origen">
+            <input v-model="formData.origen" type="text" id="origen" aria-describedby="origen-help">
+            <small id="origen-help" class="sr-only">País o región de origen</small>
           </div>
           <div class="form-group">
             <label for="ean">EAN</label>
-            <input v-model="formData.ean" type="text" id="ean">
+            <input v-model="formData.ean" type="text" id="ean" aria-describedby="ean-help">
+            <small id="ean-help" class="sr-only">Código EAN del producto</small>
           </div>
           <div class="form-group">
             <label for="lote">Lote</label>
-            <input v-model="formData.lote" type="text" id="lote">
+            <input v-model="formData.lote" type="text" id="lote" aria-describedby="lote-help">
+            <small id="lote-help" class="sr-only">Número de lote del producto</small>
           </div>
           <div class="form-group">
             <label for="fecha_envasado">Fecha Envasado</label>
-            <input v-model="formData.fecha_envasado" type="text" id="fecha_envasado">
+            <input v-model="formData.fecha_envasado" type="text" id="fecha_envasado" aria-describedby="fecha-envasado-help">
+            <small id="fecha-envasado-help" class="sr-only">Fecha en que se envasó el producto</small>
           </div>
           <div class="form-group">
             <label for="fecha_caducidad">Fecha Caducidad</label>
-            <input v-model="formData.fecha_caducidad" type="text" id="fecha_caducidad">
+            <input v-model="formData.fecha_caducidad" type="text" id="fecha_caducidad" aria-describedby="fecha-caducidad-help">
+            <small id="fecha-caducidad-help" class="sr-only">Fecha de caducidad del producto</small>
           </div>
           <div class="form-group">
             <label for="codigo_r">Código R</label>
-            <input v-model="formData.codigo_r" type="text" id="codigo_r">
+            <input v-model="formData.codigo_r" type="text" id="codigo_r" aria-describedby="codigo-r-help">
+            <small id="codigo-r-help" class="sr-only">Código de identificación R</small>
           </div>
           <div class="form-group">
             <label for="precio_kg">Precio/Kg</label>
-            <input v-model="formData.precio_kg" type="text" id="precio_kg">
+            <input v-model="formData.precio_kg" type="text" id="precio_kg" aria-describedby="precio-kg-help">
+            <small id="precio-kg-help" class="sr-only">Precio por kilogramo</small>
           </div>
           <div class="form-group">
             <label for="peso_neto">Peso Neto</label>
-            <input v-model="formData.peso_neto" type="text" id="peso_neto">
+            <input v-model="formData.peso_neto" type="text" id="peso_neto" aria-describedby="peso-neto-help">
+            <small id="peso-neto-help" class="sr-only">Peso neto del producto</small>
           </div>
           <div class="form-group">
             <label for="importe">Importe</label>
-            <input v-model="formData.importe" type="text" id="importe">
+            <input v-model="formData.importe" type="text" id="importe" aria-describedby="importe-help">
+            <small id="importe-help" class="sr-only">Importe total</small>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" @click="closeModal" class="cancel-button">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <button type="button" @click="closeModal" class="cancel-button" aria-label="Cancelar y cerrar modal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
               <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             Cancelar
           </button>
-          <button type="submit" class="save-button">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <button type="submit" class="save-button" aria-label="Guardar datos en la base de datos">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
               <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             Guardar
@@ -106,6 +116,17 @@ const closeModal = () => {
 </script>
 
 <style scoped>
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .modal-overlay {
   position: fixed;
   z-index: 1000;
@@ -131,12 +152,13 @@ const closeModal = () => {
   background-color: #ffffff;
   margin: auto;
   padding: 0;
-  border-radius: 20px;
+  border-radius: 24px;
   width: 90%;
-  max-width: 500px;
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+  max-width: 520px;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05);
   animation: slideIn 0.3s ease-out;
   overflow: hidden;
+  backdrop-filter: blur(20px);
 }
 
 @keyframes slideIn {
@@ -202,20 +224,22 @@ const closeModal = () => {
 
 .form-group input {
   width: 100%;
-  padding: 14px 16px;
-  border-radius: 10px;
+  padding: 16px 18px;
+  border-radius: 12px;
   border: 2px solid #e2e8f0;
   box-sizing: border-box;
   font-size: 16px;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   background-color: #f8fafc;
+  font-family: inherit;
 }
 
 .form-group input:focus {
   outline: none;
   border-color: #667eea;
   background-color: white;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.12), 0 2px 8px rgba(102, 126, 234, 0.08);
+  transform: translateY(-1px);
 }
 
 .modal-footer {
@@ -227,37 +251,40 @@ const closeModal = () => {
 }
 
 .cancel-button {
-  background-color: #e2e8f0;
-  color: #4a5568;
+  background-color: #f1f5f9;
+  color: #475569;
   border: none;
-  padding: 14px 24px;
-  border-radius: 10px;
+  padding: 16px 24px;
+  border-radius: 12px;
   cursor: pointer;
   flex: 1;
   font-weight: 600;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid #e2e8f0;
 }
 
 .cancel-button:hover {
-  background-color: #cbd5e0;
-  transform: translateY(-1px);
+  background-color: #e2e8f0;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .save-button {
   background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
   color: white;
   border: none;
-  padding: 14px 24px;
-  border-radius: 10px;
+  padding: 16px 24px;
+  border-radius: 12px;
   cursor: pointer;
   flex: 1;
   font-weight: 600;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 15px rgba(72, 187, 120, 0.2);
 }
 
 .save-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 25px rgba(72, 187, 120, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(72, 187, 120, 0.4);
 }
 
 /* Responsive */
