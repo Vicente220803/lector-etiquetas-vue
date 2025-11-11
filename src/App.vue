@@ -111,7 +111,6 @@
 import { ref } from 'vue'
 import Camera from './components/Camera.vue'
 import EditModal from './components/EditModal.vue'
-// ---- CAMBIO 1: Importamos el cliente de Supabase ----
 import { supabase } from './supabase.js'
 
 const webhookUrl = 'https://surexportlevante.app.n8n.cloud/webhook/4efe3070-e61a-4d03-9eef-052ed5508cab'
@@ -126,8 +125,8 @@ const showImagePreview = ref(false)
 const previewImageUrl = ref('')
 const showSuccessModal = ref(false)
 let capturedImageFile = null
+const fileToUpload = ref(null) // NUEVO: Ref para mantener el archivo original que se va a subir.
 
-// Estado para optimización de rendimiento
 const imageCache = new Map()
 
 const toggleCamera = () => {
@@ -137,6 +136,7 @@ const toggleCamera = () => {
     showCamera.value = true
     fileName.value = 'Cámara activa...'
     capturedImageFile = null
+    fileToUpload.value = null // NUEVO: Limpiar el archivo al activar la cámara
     if (fileInput.value) fileInput.value.value = ''
   }
 }
@@ -150,9 +150,9 @@ const closeCamera = () => {
 
 const handleImageCaptured = (file) => {
   capturedImageFile = file
+  fileToUpload.value = file // NUEVO: Guardar el archivo capturado para la subida
   fileName.value = `Imagen capturada: ${file.name}`
 
-  // Optimizar carga de imagen con cache
   const cacheKey = file.name + file.size
   if (imageCache.has(cacheKey)) {
     previewImageUrl.value = imageCache.get(cacheKey)
@@ -169,23 +169,21 @@ const handleFileChange = () => {
   if (fileInput.value.files.length > 0) {
     const file = fileInput.value.files[0]
 
-    // Validar tipo de archivo en selección
     if (!file.type.startsWith('image/')) {
       showError('Por favor, selecciona un archivo de imagen válido.')
       fileInput.value.value = ''
       return
     }
 
-    // Validar tamaño del archivo
     if (file.size > 10 * 1024 * 1024) {
       showError('El archivo es demasiado grande. Máximo 10MB permitido.')
       fileInput.value.value = ''
       return
     }
 
+    fileToUpload.value = file // NUEVO: Guardar el archivo seleccionado para la subida
     fileName.value = file.name
 
-    // Optimizar carga de imagen con cache
     const cacheKey = file.name + file.size
     if (imageCache.has(cacheKey)) {
       previewImageUrl.value = imageCache.get(cacheKey)
@@ -210,13 +208,11 @@ const submitForm = async () => {
     return
   }
 
-  // Validar tipo de archivo
   if (!fileToSend.type.startsWith('image/')) {
     showError('Por favor, selecciona un archivo de imagen válido.')
     return
   }
 
-  // Validar tamaño del archivo (máximo 10MB)
   if (fileToSend.size > 10 * 1024 * 1024) {
     showError('El archivo es demasiado grande. Máximo 10MB permitido.')
     return
@@ -248,32 +244,66 @@ const submitForm = async () => {
   }
 }
 
-// ---- CAMBIO 2: Reemplazamos esta función para que guarde en Supabase ----
+// ---- ¡¡ÚNICA FUNCIÓN MODIFICADA!! ----
 async function handleSave(data) {
+  isProcessing.value = true
+  
   try {
-    isProcessing.value = true // Reutilizamos el estado de carga para el botón de "Guardando..."
-    
-    // Usamos el cliente de Supabase para insertar los datos
-    // que nos llegan desde el modal de edición.
-    const { error } = await supabase
-      .from('lecturas') // El nombre EXACTO de nuestra tabla
-      .insert([ data ]) // 'data' ya tiene el formato correcto { cliente: '...', lote: '...', ... }
-
-    if (error) {
-      // Si Supabase devuelve un error, lo mostramos
-      throw error
+    if (!fileToUpload.value) {
+      throw new Error("No se encontró la imagen para subir. Por favor, selecciona la imagen de nuevo.");
     }
 
-    // Si todo va bien, cerramos el modal de edición y mostramos el modal de éxito
-    showModal.value = false
-    showSuccessMessage()
-    // La app se resetea cuando se cierra el modal de éxito.
+    // 1. Crear un nombre de archivo único para evitar colisiones
+    const file = fileToUpload.value;
+    const fileExt = file.name.split('.').pop();
+    const uniqueFileName = `${Date.now()}.${fileExt}`;
+    const filePath = `${uniqueFileName}`; // En Supabase, la ruta ya incluye el bucket.
+
+    // 2. Subir la imagen a Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from('etiquetas') // El nombre exacto de tu bucket
+      .upload(filePath, file);
+
+    if (uploadError) {
+      // Si hay un error al subir, lo lanzamos para que se muestre
+      throw uploadError;
+    }
+
+    // 3. Obtener la URL pública de la imagen que acabamos de subir
+    const { data: urlData } = supabase.storage
+      .from('etiquetas')
+      .getPublicUrl(filePath);
+    
+    if (!urlData || !urlData.publicUrl) {
+        throw new Error("No se pudo obtener la URL pública de la imagen.");
+    }
+    const imageUrl = urlData.publicUrl;
+
+    // 4. Añadir la URL de la imagen a los datos que vamos a guardar
+    const dataToSave = {
+      ...data,
+      imagen_url: imageUrl 
+    };
+
+    // 5. Guardar el objeto completo (datos de texto + URL) en la base de datos
+    const { error: insertError } = await supabase
+      .from('lecturas')
+      .insert([ dataToSave ]);
+
+    if (insertError) {
+      // Si hay un error al insertar, lo lanzamos
+      throw insertError;
+    }
+
+    // Si todo va bien, continuamos con el flujo normal
+    showModal.value = false;
+    showSuccessMessage();
 
   } catch (error) {
-    // Mostramos cualquier error que ocurra
-    alert('Error al guardar en la base de datos: ' + error.message)
+    // Usamos tu función de showError para una mejor experiencia de usuario
+    showError('Error al guardar: ' + error.message);
   } finally {
-    isProcessing.value = false // Desactivamos el estado de carga
+    isProcessing.value = false;
   }
 }
 
@@ -285,17 +315,16 @@ const closeModal = () => {
 const resetApp = () => {
   if (fileInput.value) fileInput.value.value = ''
   capturedImageFile = null
+  fileToUpload.value = null; // NUEVO: Limpiar el archivo a subir
   fileName.value = 'Ningún archivo seleccionado'
   showCamera.value = false
 
-  // Limpiar URLs de objetos para liberar memoria
   if (previewImageUrl.value) {
     URL.revokeObjectURL(previewImageUrl.value)
   }
   previewImageUrl.value = ''
   showImagePreview.value = false
 
-  // Limpiar cache de imágenes periódicamente
   if (imageCache.size > 10) {
     imageCache.clear()
   }
@@ -310,13 +339,13 @@ const closeImageZoom = () => {
 }
 
 const clearImage = () => {
-  // Limpiar URL de objeto para liberar memoria
   if (previewImageUrl.value) {
     URL.revokeObjectURL(previewImageUrl.value)
   }
   previewImageUrl.value = ''
   if (fileInput.value) fileInput.value.value = ''
   capturedImageFile = null
+  fileToUpload.value = null; // NUEVO: Limpiar el archivo a subir
   fileName.value = 'Ningún archivo seleccionado'
 }
 
@@ -326,11 +355,10 @@ const showSuccessMessage = () => {
 
 const closeSuccessModal = () => {
   showSuccessModal.value = false
-  resetApp() // Reseteamos la app después de cerrar el mensaje de éxito.
+  resetApp()
 }
 
 const showError = (message) => {
-  // Crear un toast de error más elegante
   const toast = document.createElement('div')
   toast.className = 'error-toast'
   toast.innerHTML = `
@@ -344,10 +372,8 @@ const showError = (message) => {
   `
   document.body.appendChild(toast)
 
-  // Animar entrada
   setTimeout(() => toast.classList.add('show'), 10)
 
-  // Remover después de 5 segundos
   setTimeout(() => {
     toast.classList.remove('show')
     setTimeout(() => document.body.removeChild(toast), 300)
