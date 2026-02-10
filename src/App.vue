@@ -1,6 +1,6 @@
 <template>
   <div class="container">
-    <h1>Enviar Foto de Etiqueta</h1>
+    <h1>LECTURA DE ETIQUETAS</h1>
 
     <form @submit.prevent="submitForm" class="upload-form">
       <button type="button" @click="toggleCamera" class="take-picture-button" aria-label="Alternar cámara para tomar foto">
@@ -115,6 +115,9 @@ import { supabase } from './supabase.js'
 
 const webhookUrl = 'https://surexportlevante.app.n8n.cloud/webhook/4efe3070-e61a-4d03-9eef-052ed5508cab'
 
+// --- MODO REAL ACTIVADO (Cambiado a false para que use n8n) ---
+const isSimulationMode = ref(false) 
+
 const fileInput = ref(null)
 const showCamera = ref(false)
 const fileName = ref('Ningún archivo seleccionado')
@@ -125,7 +128,7 @@ const showImagePreview = ref(false)
 const previewImageUrl = ref('')
 const showSuccessModal = ref(false)
 let capturedImageFile = null
-const fileToUpload = ref(null) // NUEVO: Ref para mantener el archivo original que se va a subir.
+const fileToUpload = ref(null) 
 
 const imageCache = new Map()
 
@@ -136,7 +139,7 @@ const toggleCamera = () => {
     showCamera.value = true
     fileName.value = 'Cámara activa...'
     capturedImageFile = null
-    fileToUpload.value = null // NUEVO: Limpiar el archivo al activar la cámara
+    fileToUpload.value = null 
     if (fileInput.value) fileInput.value.value = ''
   }
 }
@@ -150,7 +153,7 @@ const closeCamera = () => {
 
 const handleImageCaptured = (file) => {
   capturedImageFile = file
-  fileToUpload.value = file // NUEVO: Guardar el archivo capturado para la subida
+  fileToUpload.value = file 
   fileName.value = `Imagen capturada: ${file.name}`
 
   const cacheKey = file.name + file.size
@@ -181,7 +184,7 @@ const handleFileChange = () => {
       return
     }
 
-    fileToUpload.value = file // NUEVO: Guardar el archivo seleccionado para la subida
+    fileToUpload.value = file 
     fileName.value = file.name
 
     const cacheKey = file.name + file.size
@@ -220,6 +223,24 @@ const submitForm = async () => {
 
   isProcessing.value = true
 
+  // --- LÓGICA DE SIMULACIÓN ---
+  if (isSimulationMode.value) {
+    console.log("Simulando respuesta de n8n para ahorrar ejecuciones...");
+    setTimeout(() => {
+      extractedData.value = {
+        cliente: "CLIENTE DE PRUEBA",
+        origen: "ESPAÑA (SIMULADO)",
+        ean: "8400000000001",
+        lote: "L-12345",
+        fecha_envasado: "2026-01-05"
+      }
+      showModal.value = true
+      isProcessing.value = false
+    }, 1500)
+    return
+  }
+
+  // --- LÓGICA REAL (Fetch a n8n) ---
   const formData = new FormData()
   formData.append('file', fileToSend)
 
@@ -244,7 +265,6 @@ const submitForm = async () => {
   }
 }
 
-// ---- ¡¡ÚNICA FUNCIÓN MODIFICADA!! ----
 async function handleSave(data) {
   isProcessing.value = true
   
@@ -253,23 +273,17 @@ async function handleSave(data) {
       throw new Error("No se encontró la imagen para subir. Por favor, selecciona la imagen de nuevo.");
     }
 
-    // 1. Crear un nombre de archivo único para evitar colisiones
     const file = fileToUpload.value;
     const fileExt = file.name.split('.').pop();
     const uniqueFileName = `${Date.now()}.${fileExt}`;
-    const filePath = `${uniqueFileName}`; // En Supabase, la ruta ya incluye el bucket.
+    const filePath = `${uniqueFileName}`; 
 
-    // 2. Subir la imagen a Supabase Storage
     const { error: uploadError } = await supabase.storage
-      .from('etiquetas') // El nombre exacto de tu bucket
+      .from('etiquetas') 
       .upload(filePath, file);
 
-    if (uploadError) {
-      // Si hay un error al subir, lo lanzamos para que se muestre
-      throw uploadError;
-    }
+    if (uploadError) throw uploadError;
 
-    // 3. Obtener la URL pública de la imagen que acabamos de subir
     const { data: urlData } = supabase.storage
       .from('etiquetas')
       .getPublicUrl(filePath);
@@ -279,28 +293,21 @@ async function handleSave(data) {
     }
     const imageUrl = urlData.publicUrl;
 
-    // 4. Añadir la URL de la imagen a los datos que vamos a guardar
     const dataToSave = {
       ...data,
       imagen_url: imageUrl 
     };
 
-    // 5. Guardar el objeto completo (datos de texto + URL) en la base de datos
     const { error: insertError } = await supabase
       .from('lecturas')
       .insert([ dataToSave ]);
 
-    if (insertError) {
-      // Si hay un error al insertar, lo lanzamos
-      throw insertError;
-    }
+    if (insertError) throw insertError;
 
-    // Si todo va bien, continuamos con el flujo normal
     showModal.value = false;
     showSuccessMessage();
 
   } catch (error) {
-    // Usamos tu función de showError para una mejor experiencia de usuario
     showError('Error al guardar: ' + error.message);
   } finally {
     isProcessing.value = false;
@@ -315,7 +322,7 @@ const closeModal = () => {
 const resetApp = () => {
   if (fileInput.value) fileInput.value.value = ''
   capturedImageFile = null
-  fileToUpload.value = null; // NUEVO: Limpiar el archivo a subir
+  fileToUpload.value = null; 
   fileName.value = 'Ningún archivo seleccionado'
   showCamera.value = false
 
@@ -345,7 +352,7 @@ const clearImage = () => {
   previewImageUrl.value = ''
   if (fileInput.value) fileInput.value.value = ''
   capturedImageFile = null
-  fileToUpload.value = null; // NUEVO: Limpiar el archivo a subir
+  fileToUpload.value = null; 
   fileName.value = 'Ningún archivo seleccionado'
 }
 
@@ -396,12 +403,12 @@ body {
 
 .container {
   background-color: white;
-  padding: 40px;
+  padding: 50px;
   border-radius: 24px;
   box-shadow: 0 25px 50px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.05);
   text-align: center;
   width: 100%;
-  max-width: 520px;
+  max-width: 600px;
   position: relative;
   overflow: hidden;
   animation: slideUp 0.6s ease-out;
@@ -438,29 +445,30 @@ body {
 
 h1 {
   color: #1a202c;
-  margin-bottom: 30px;
-  font-weight: 800;
-  font-size: 32px;
+  margin-bottom: 40px;
+  font-weight: 900;
+  font-size: 42px;
   letter-spacing: -0.025em;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  text-transform: uppercase;
 }
 
 .upload-form {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 15px;
+  gap: 18px;
 }
 
 .take-picture-button {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  padding: 18px 32px;
-  font-size: 16px;
+  padding: 22px 36px;
+  font-size: 18px;
   font-weight: 600;
   border-radius: 14px;
   cursor: pointer;
@@ -471,6 +479,7 @@ h1 {
   justify-content: center;
   gap: 12px;
   box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
+  min-height: 60px;
 }
 
 .take-picture-button:hover {
@@ -481,7 +490,7 @@ h1 {
 .file-label {
   background-color: #f8fafc;
   color: #4a5568;
-  padding: 18px 32px;
+  padding: 22px 36px;
   border-radius: 14px;
   cursor: pointer;
   display: inline-block;
@@ -490,9 +499,15 @@ h1 {
   text-align: center;
   border: 2px dashed #d1d5db;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 17px;
   position: relative;
   overflow: hidden;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
 }
 
 .file-label:hover {
@@ -517,15 +532,20 @@ h1 {
   background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
   color: white;
   border: none;
-  padding: 18px 32px;
-  font-size: 16px;
+  padding: 22px 36px;
+  font-size: 18px;
   font-weight: 600;
   border-radius: 14px;
   cursor: pointer;
-  margin-top: 24px;
+  margin-top: 30px;
   width: 100%;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 4px 15px rgba(72, 187, 120, 0.2);
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
 }
 
 .submit-button:hover:not(:disabled) {
@@ -596,12 +616,12 @@ h1 {
 }
 
 .image-preview {
-  margin: 24px 0;
+  margin: 30px 0;
   position: relative;
   display: inline-block;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.15);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   backdrop-filter: blur(10px);
@@ -614,7 +634,7 @@ h1 {
 
 .preview-image {
   width: 100%;
-  max-width: 300px;
+  max-width: 400px;
   height: auto;
   display: block;
   border-radius: 12px;
