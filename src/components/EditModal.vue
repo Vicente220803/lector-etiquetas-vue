@@ -11,9 +11,17 @@
       </div>
       <form @submit.prevent="saveData" class="edit-form">
         <div class="modal-body">
-          
-          <!-- SECCIÓN DE PREGUNTA INTERACTIVA (P+X) -->
-          <div v-if="data && data.validacion_px" class="question-card">
+          <!-- BANNER DE P+X VALIDADO -->
+          <div v-if="esPxCorrecto && pxConfirmado && data && data.validacion_px" class="px-success-banner">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="10" fill="#48bb78"/>
+              <path d="M8 12l2 2 4-4" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>P+X Correcto: <strong>{{ px_usuario }} días</strong></span>
+          </div>
+
+          <!-- SECCIÓN DE PREGUNTA INTERACTIVA (P+X) - Solo si no está validado -->
+          <div v-if="data && data.validacion_px && !esPxCorrecto" class="question-card">
             <div class="question-icon">❓</div>
             <div class="question-body">
               <label class="question-label">PREGUNTA DE SEGURIDAD:</label>
@@ -60,41 +68,41 @@
           </div>
           <div class="form-group">
             <label for="origen">Origen</label>
-            <input v-model="formData.origen" type="text" id="origen">
+            <input v-model="formData.origen" type="text" id="origen" readonly class="input-readonly">
           </div>
           <div class="form-group">
             <label for="ean">EAN</label>
-            <input v-model="formData.ean" type="text" id="ean">
+            <input v-model="formData.ean" type="text" id="ean" readonly class="input-readonly">
           </div>
           <div class="form-group">
             <label for="lote">Lote</label>
-            <input v-model="formData.lote" type="text" id="lote">
+            <input v-model="formData.lote" type="text" id="lote" readonly class="input-readonly">
           </div>
           <div class="form-row">
             <div class="form-group">
               <label for="fecha_envasado">Fecha Envasado</label>
-              <input v-model="formData.fecha_envasado" type="text" id="fecha_envasado">
+              <input v-model="formData.fecha_envasado" type="text" id="fecha_envasado" readonly class="input-readonly">
             </div>
             <div class="form-group">
               <label for="fecha_caducidad">Fecha Caducidad</label>
-              <input v-model="formData.fecha_caducidad" type="text" id="fecha_caducidad">
+              <input v-model="formData.fecha_caducidad" type="text" id="fecha_caducidad" readonly class="input-readonly">
             </div>
           </div>
           <div class="form-group">
             <label for="codigo_r">Código R</label>
-            <input v-model="formData.codigo_r" type="text" id="codigo_r">
+            <input v-model="formData.codigo_r" type="text" id="codigo_r" readonly class="input-readonly">
           </div>
           <div class="form-group">
             <label for="precio_kg">Precio/Kg</label>
-            <input v-model="formData.precio_kg" type="text" id="precio_kg">
+            <input v-model="formData.precio_kg" type="text" id="precio_kg" readonly class="input-readonly">
           </div>
           <div class="form-group">
             <label for="peso_neto">Peso Neto</label>
-            <input v-model="formData.peso_neto" type="text" id="peso_neto">
+            <input v-model="formData.peso_neto" type="text" id="peso_neto" readonly class="input-readonly">
           </div>
           <div class="form-group">
             <label for="importe">Importe</label>
-            <input v-model="formData.importe" type="text" id="importe">
+            <input v-model="formData.importe" type="text" id="importe" readonly class="input-readonly">
           </div>
         </div>
 
@@ -170,7 +178,19 @@ const esPxCorrecto = computed(() => {
 
 const saveData = () => {
   if (esPxCorrecto.value) {
-    emit('save', formData.value)
+    const cleanData = {
+      cliente: formData.value.cliente,
+      origen: formData.value.origen,
+      ean: formData.value.ean,
+      lote: formData.value.lote,
+      fecha_envasado: formData.value.fecha_envasado,
+      fecha_caducidad: formData.value.fecha_caducidad,
+      codigo_r: formData.value.codigo_r,
+      precio_kg: formData.value.precio_kg,
+      peso_neto: formData.value.peso_neto,
+      importe: formData.value.importe
+    }
+    emit('save', cleanData)
     emit('close')
   }
 }
@@ -279,6 +299,38 @@ const closeModal = () => {
   opacity: 0.6;
 }
 
+/* BANNER DE P+X VALIDADO */
+.px-success-banner {
+  background: linear-gradient(135deg, #c6f6d5 0%, #9ae6b4 100%);
+  border: 2px solid #48bb78;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #22543d;
+  font-weight: 600;
+  font-size: 16px;
+  animation: slideDown 0.4s ease-out;
+}
+
+.px-success-banner strong {
+  color: #276749;
+  font-weight: 700;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ALERTA CRÍTICA */
 .critical-alert {
   background: #fff5f5;
@@ -360,8 +412,14 @@ const closeModal = () => {
 
 .modal-body {
   padding: 25px;
-  overflow-y: auto;
-  flex: 1;
+  overflow-y: scroll;
+  max-height: 50vh;
+}
+
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .form-group { margin-bottom: 18px; text-align: left; }
@@ -377,6 +435,7 @@ const closeModal = () => {
   gap: 15px;
   flex-shrink: 0;
   border-top: 1px solid #e2e8f0;
+  margin-top: auto;
 }
 
 .cancel-button {

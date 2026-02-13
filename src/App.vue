@@ -302,7 +302,10 @@ async function handleSave(data) {
       .from('lecturas')
       .insert([ dataToSave ]);
 
-    if (insertError) throw insertError;
+    if (insertError) {
+      console.error('Supabase insert error:', insertError);
+      throw new Error(`Supabase error: ${insertError.message || JSON.stringify(insertError)}`);
+    }
 
     showModal.value = false;
     showSuccessMessage();
