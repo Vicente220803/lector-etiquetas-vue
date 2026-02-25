@@ -232,7 +232,18 @@ const submitForm = async () => {
         origen: "ESPAÑA (SIMULADO)",
         ean: "8400000000001",
         lote: "L-12345",
-        fecha_envasado: "2026-01-05"
+        fecha_envasado: "2026-01-05",
+        fecha_caducidad: "2026-02-05",
+        codigo_r: "R123",
+        precio_kg: "2.50",
+        peso_neto: "500g",
+        importe: "1.25",
+        validacion_px: {
+          px_esperado: 5,
+          px_leido: 7,
+          dia_semana_nombre: "LUNES",
+          diferencia: 2
+        }
       }
       showModal.value = true
       isProcessing.value = false

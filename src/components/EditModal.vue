@@ -20,8 +20,8 @@
             <span>P+X Correcto: <strong>{{ px_usuario }} días</strong></span>
           </div>
 
-          <!-- SECCIÓN DE PREGUNTA INTERACTIVA (P+X) - Solo si no está validado -->
-          <div v-if="data && data.validacion_px && !esPxCorrecto" class="question-card">
+          <!-- SECCIÓN DE PREGUNTA INTERACTIVA (P+X) - Siempre aparece para verificación -->
+          <div v-if="data && data.validacion_px" class="question-card">
             <div class="question-icon">❓</div>
             <div class="question-body">
               <label class="question-label">PREGUNTA DE SEGURIDAD:</label>
@@ -53,8 +53,14 @@
             </div>
           </div>
 
+          <!-- ERROR DE IA / BLOQUEO DE SERVICIO -->
+          <div v-if="data && data.bloqueo_ia" class="critical-alert error-bloqueo">
+            <strong>🛑 ERROR DEL SERVICIO:</strong>
+            <p>{{ data.mensaje_error || 'Error al procesar la imagen. Intenta de nuevo.' }}</p>
+          </div>
+
           <!-- AVISO SI LA ETIQUETA ESTÁ MAL IMPRESA (ERROR SANITARIO) -->
-          <div v-if="data && data.error_sanitario && esPxCorrecto" class="critical-alert">
+          <div v-if="data && data.validacion_px && data.error_sanitario && esPxCorrecto" class="critical-alert">
             <strong>⚠️ ALERTA SANITARIA:</strong>
             <p>Has respondido bien, pero la <strong>etiqueta física</strong> tiene una fecha de caducidad incorrecta (marcaría un P+{{ data.validacion_px.px_leido }}). ¡No permitas el etiquetado!</p>
           </div>
@@ -343,6 +349,10 @@ const closeModal = () => {
 
 .critical-alert strong { color: #c53030; display: block; margin-bottom: 5px; }
 .critical-alert p { margin: 0; font-size: 13px; color: #742a2a; }
+
+.error-bloqueo { border-left-color: #dc2626; background: #fef2f2; }
+.error-bloqueo strong { color: #991b1b; }
+.error-bloqueo p { color: #7f1d1d; }
 
 .form-section-title {
   font-size: 12px;
