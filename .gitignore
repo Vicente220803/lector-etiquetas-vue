@@ -34,3 +34,6 @@ coverage
 
 # Vitest
 __screenshots__/
+
+# MCP Configuration with credentials
+.mcp.json
