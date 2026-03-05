@@ -276,50 +276,103 @@ const submitForm = async () => {
   }
 }
 
+// Función para normalizar fechas al formato DD.MM.YY
+function normalizarFecha(fechaStr) {
+  if (!fechaStr) return ''
+
+  // Limpiar y separar la fecha
+  const limpia = fechaStr.trim()
+
+  // Detectar formato y convertir a DD.MM.YY
+  // Intenta varios formatos: DD/M/YYYY, DD.MM.YYYY, DD-MM-YYYY, DD.MM.YY, etc.
+  let dia, mes, ano
+
+  // Formato DD/M/YYYY o DD/MM/YYYY
+  if (limpia.includes('/')) {
+    const partes = limpia.split('/')
+    if (partes.length === 3) {
+      dia = partes[0].padStart(2, '0')
+      mes = partes[1].padStart(2, '0')
+      ano = partes[2].length === 4 ? partes[2].slice(-2) : partes[2]
+      return `${dia}.${mes}.${ano}`
+    }
+  }
+
+  // Formato DD.MM.YYYY o DD.MM.YY
+  if (limpia.includes('.')) {
+    const partes = limpia.split('.')
+    if (partes.length === 3) {
+      dia = partes[0].padStart(2, '0')
+      mes = partes[1].padStart(2, '0')
+      ano = partes[2].length === 4 ? partes[2].slice(-2) : partes[2]
+      return `${dia}.${mes}.${ano}`
+    }
+  }
+
+  // Si no coincide con ningún formato, devolver tal cual
+  return limpia
+}
+
 async function handleSave(data) {
   isProcessing.value = true
-  
+
   try {
     if (!fileToUpload.value) {
       throw new Error("No se encontró la imagen para subir. Por favor, selecciona la imagen de nuevo.");
     }
 
-    const file = fileToUpload.value;
-    const fileExt = file.name.split('.').pop();
-    const uniqueFileName = `${Date.now()}.${fileExt}`;
-    const filePath = `${uniqueFileName}`; 
+    const webhookUrlFinal = 'https://surexportlevante.app.n8n.cloud/webhook/guardar-etiqueta'
 
-    const { error: uploadError } = await supabase.storage
-      .from('etiquetas') 
-      .upload(filePath, file);
+    // Crear FormData con los campos + archivo binario
+    const formData = new FormData()
+    formData.append('cliente', data.cliente || '')
+    formData.append('producto_db', data.producto_db || '')
+    formData.append('origen', data.origen || '')
+    formData.append('ean', data.ean || '')
+    formData.append('lote', data.lote || '')
+    formData.append('codigo_r', data.codigo_r || '')
+    formData.append('fecha_envasado', normalizarFecha(data.fecha_envasado))
+    formData.append('fecha_caducidad', normalizarFecha(data.fecha_caducidad))
+    formData.append('precio_kg', data.precio_kg || '')
+    formData.append('peso_neto', data.peso_neto || '')
+    formData.append('importe', data.importe || '')
+    formData.append('px_usuario', data.px_usuario || '')
 
-    if (uploadError) throw uploadError;
+    // Adjuntar el archivo binario real
+    formData.append('file', fileToUpload.value)
 
-    const { data: urlData } = supabase.storage
-      .from('etiquetas')
-      .getPublicUrl(filePath);
-    
-    if (!urlData || !urlData.publicUrl) {
-        throw new Error("No se pudo obtener la URL pública de la imagen.");
+    // DEBUG: Log para verificar los datos que se envían
+    console.log('📤 Datos enviados al webhook guardar-etiqueta:')
+    console.log('- cliente:', data.cliente)
+    console.log('- producto_db:', data.producto_db)
+    console.log('- origen:', data.origen)
+    console.log('- ean:', data.ean)
+    console.log('- lote:', data.lote)
+    console.log('- codigo_r:', data.codigo_r)
+    console.log('- fecha_envasado:', data.fecha_envasado)
+    console.log('- fecha_caducidad:', data.fecha_caducidad)
+    console.log('- precio_kg:', data.precio_kg)
+    console.log('- peso_neto:', data.peso_neto)
+    console.log('- importe:', data.importe)
+    console.log('- px_usuario:', data.px_usuario)
+    console.log('- file:', fileToUpload.value.name)
+
+    // Realizar POST al webhook
+    const response = await fetch(webhookUrlFinal, {
+      method: 'POST',
+      body: formData
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Error del webhook: ${response.status} - ${errorText}`)
     }
-    const imageUrl = urlData.publicUrl;
 
-    const dataToSave = {
-      ...data,
-      imagen_url: imageUrl 
-    };
+    const responseData = await response.json()
+    console.log('Respuesta del webhook:', responseData)
 
-    const { error: insertError } = await supabase
-      .from('lecturas')
-      .insert([ dataToSave ]);
-
-    if (insertError) {
-      console.error('Supabase insert error:', insertError);
-      throw new Error(`Supabase error: ${insertError.message || JSON.stringify(insertError)}`);
-    }
-
-    showModal.value = false;
-    showSuccessMessage();
+    showModal.value = false
+    showSuccessMessage()
 
   } catch (error) {
     showError('Error al guardar: ' + error.message);

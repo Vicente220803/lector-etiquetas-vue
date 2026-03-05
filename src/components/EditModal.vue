@@ -59,10 +59,15 @@
             <p>{{ data.mensaje_error || 'Error al procesar la imagen. Intenta de nuevo.' }}</p>
           </div>
 
-          <!-- AVISO SI LA ETIQUETA ESTÁ MAL IMPRESA (ERROR SANITARIO) -->
-          <div v-if="data && data.validacion_px && data.error_sanitario && esPxCorrecto" class="critical-alert">
+          <!-- AVISO SI HAY ERROR EN LA VALIDACIÓN -->
+          <div v-if="hayErrorSanitarioReal" class="critical-alert">
             <strong>⚠️ ALERTA SANITARIA:</strong>
-            <p>Has respondido bien, pero la <strong>etiqueta física</strong> tiene una fecha de caducidad incorrecta (marcaría un P+{{ data.validacion_px.px_leido }}). ¡No permitas el etiquetado!</p>
+            <div v-if="Number(px_usuario) !== Number(data?.validacion_px?.px_leido)">
+              <p>❌ <strong>ERROR:</strong> La etiqueta marca <strong>P+{{ data?.validacion_px?.px_leido }}</strong>, pero ingresaste <strong>P+{{ px_usuario }}</strong>. Deben coincidir.</p>
+            </div>
+            <div v-else>
+              <p>⚠️ <strong>AVISO:</strong> P+{{ px_usuario }} está <strong>FUERA del rango aceptable</strong> para {{ formData.cliente }} (rango: {{ pxRangosPorCliente[formData.cliente]?.min }}-{{ pxRangosPorCliente[formData.cliente]?.max }}). ¡No permitas el etiquetado!</p>
+            </div>
           </div>
 
           <!-- FORMULARIO DE DATOS (Se puede ver pero el botón guardar depende de la pregunta) -->
@@ -71,6 +76,10 @@
           <div class="form-group">
             <label for="cliente">Cliente</label>
             <input v-model="formData.cliente" type="text" id="cliente" readonly class="input-readonly">
+          </div>
+          <div class="form-group">
+            <label for="producto_db">Producto (SAP/BD)</label>
+            <input v-model="formData.producto_db" type="text" id="producto_db" :readonly="formData.producto_db !== 'No encontrado en BD' && formData.producto_db !== ''" class="input-product">
           </div>
           <div class="form-group">
             <label for="origen">Origen</label>
@@ -147,6 +156,7 @@ const px_usuario = ref(null)
 const pxConfirmado = ref(false)
 const formData = ref({
   cliente: '',
+  producto_db: '',
   origen: '',
   ean: '',
   lote: '',
@@ -174,18 +184,73 @@ const confirmarPx = () => {
   pxConfirmado.value = true
 }
 
+// Rangos aceptables de P+X por cliente
+const pxRangosPorCliente = {
+  'LIDL': { min: 8, max: 9 },
+  'ALDI': { min: 8, max: 9 },
+  'DELMONTE': { min: 8, max: 9 },
+  'MERCADONA SA': { min: 5, max: 5 }
+}
+
+// Función para verificar si el P+X está dentro del rango aceptable
+const verificarPxEnRango = (cliente, pxValue) => {
+  const rango = pxRangosPorCliente[cliente]
+  if (!rango) return false
+  return pxValue >= rango.min && pxValue <= rango.max
+}
+
 // Lógica de comprobación
 const esPxCorrecto = computed(() => {
   if (!props.data || !props.data.validacion_px) return true // Si no hay validación, permitir guardar
 
   if (!pxConfirmado.value) return false
-  return Number(px_usuario.value) === Number(props.data.validacion_px.px_esperado)
+
+  const pxValue = Number(px_usuario.value)
+  const pxLeido = Number(props.data.validacion_px.px_leido) // Lo que la etiqueta REALMENTE dice
+  const cliente = formData.value.cliente
+  const rango = pxRangosPorCliente[cliente]
+
+  // PRIMERO: El usuario debe ingresar lo que la etiqueta realmente marca
+  if (pxValue !== pxLeido) {
+    return false // Error: no coincide con lo que marca la etiqueta
+  }
+
+  // SEGUNDO: Verificar que ese valor esté en el rango aceptable
+  if (!rango) {
+    // Si no hay rango definido, solo validar que sea igual a px_leido
+    return true
+  }
+
+  // Validar que esté dentro del rango
+  return pxValue >= rango.min && pxValue <= rango.max
+})
+
+// Verificar si hay error sanitario REAL
+const hayErrorSanitarioReal = computed(() => {
+  if (!props.data || !props.data.validacion_px || !pxConfirmado.value) return false
+
+  const pxValue = Number(px_usuario.value)
+  const pxLeido = Number(props.data.validacion_px.px_leido)
+  const cliente = formData.value.cliente
+
+  // Error 1: Usuario ingresó diferente a lo que la etiqueta marca
+  if (pxValue !== pxLeido) {
+    return true
+  }
+
+  // Error 2: Lo que marca la etiqueta está FUERA del rango aceptable
+  if (!verificarPxEnRango(cliente, pxLeido)) {
+    return true
+  }
+
+  return false
 })
 
 const saveData = () => {
   if (esPxCorrecto.value) {
     const cleanData = {
       cliente: formData.value.cliente,
+      producto_db: formData.value.producto_db,
       origen: formData.value.origen,
       ean: formData.value.ean,
       lote: formData.value.lote,
@@ -194,7 +259,8 @@ const saveData = () => {
       codigo_r: formData.value.codigo_r,
       precio_kg: formData.value.precio_kg,
       peso_neto: formData.value.peso_neto,
-      importe: formData.value.importe
+      importe: formData.value.importe,
+      px_usuario: px_usuario.value
     }
     emit('save', cleanData)
     emit('close')
@@ -437,6 +503,9 @@ const closeModal = () => {
 .form-group input { width: 100%; padding: 14px; border-radius: 10px; border: 2px solid #e2e8f0; box-sizing: border-box; font-size: 16px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 .input-readonly { background-color: #f7fafc; color: #a0aec0; cursor: not-allowed; }
+.input-product { background-color: #ffffff; color: #2d3748; }
+.input-product:not([readonly]) { border-color: #f6ad55; background-color: #fffaf0; }
+.input-product:not([readonly]):focus { border-color: #ed8936; box-shadow: 0 0 0 3px rgba(237, 137, 54, 0.1); }
 
 .modal-footer {
   padding: 20px;
