@@ -70,6 +70,87 @@
             </div>
           </div>
 
+          <!-- CONFIRMACIÓN FINAL (Solo aparece si P+X es correcto) -->
+          <div v-if="esPxCorrecto && !confirmacionFinal" class="confirmation-card">
+            <div class="confirmation-icon">✓</div>
+            <div class="confirmation-body">
+              <label class="confirmation-label">VERIFICACIÓN FINAL:</label>
+              <p class="confirmation-text">
+                P+X validado correctamente. Ahora verifica que <strong>todos los datos</strong> coincidan con la etiqueta física:
+              </p>
+
+              <div class="confirmation-grid">
+                <div class="confirmation-item">
+                  <span class="confirmation-label-small">Cliente</span>
+                  <span class="confirmation-value">{{ formData.cliente }}</span>
+                </div>
+                <div class="confirmation-item">
+                  <span class="confirmation-label-small">Producto</span>
+                  <span class="confirmation-value">{{ formData.producto_db || 'N/A' }}</span>
+                </div>
+                <div class="confirmation-item">
+                  <span class="confirmation-label-small">Origen</span>
+                  <span class="confirmation-value">{{ formData.origen }}</span>
+                </div>
+                <div class="confirmation-item">
+                  <span class="confirmation-label-small">EAN</span>
+                  <span class="confirmation-value">{{ formData.ean }}</span>
+                </div>
+                <div class="confirmation-item">
+                  <span class="confirmation-label-small">Lote</span>
+                  <span class="confirmation-value">{{ formData.lote }}</span>
+                </div>
+                <div class="confirmation-item">
+                  <span class="confirmation-label-small">Código R</span>
+                  <span class="confirmation-value">{{ formData.codigo_r }}</span>
+                </div>
+                <div class="confirmation-item">
+                  <span class="confirmation-label-small">Envasado</span>
+                  <span class="confirmation-value">{{ formData.fecha_envasado }}</span>
+                </div>
+                <div class="confirmation-item">
+                  <span class="confirmation-label-small">Caducidad</span>
+                  <span class="confirmation-value">{{ formData.fecha_caducidad }}</span>
+                </div>
+                <div class="confirmation-item">
+                  <span class="confirmation-label-small">Precio/Kg</span>
+                  <span class="confirmation-value">{{ formData.precio_kg }}</span>
+                </div>
+                <div class="confirmation-item">
+                  <span class="confirmation-label-small">Peso Neto</span>
+                  <span class="confirmation-value">{{ formData.peso_neto }}</span>
+                </div>
+                <div class="confirmation-item">
+                  <span class="confirmation-label-small">Importe</span>
+                  <span class="confirmation-value">{{ formData.importe }}</span>
+                </div>
+                <div class="confirmation-item confirmation-item-highlight">
+                  <span class="confirmation-label-small">P+X Verificado</span>
+                  <span class="confirmation-value confirmation-value-highlight">{{ px_usuario }} días</span>
+                </div>
+              </div>
+
+              <p class="confirmation-question">¿Todos los datos son correctos?</p>
+
+              <div class="confirmation-buttons">
+                <button
+                  type="button"
+                  @click="confirmacionFinal = true"
+                  class="confirm-final-button"
+                >
+                  ✓ Sí, todo es correcto
+                </button>
+                <button
+                  type="button"
+                  @click="confirmacionFinal = false; pxConfirmado = false"
+                  class="cancel-final-button"
+                >
+                  ✗ No, revisar
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- FORMULARIO DE DATOS (Se puede ver pero el botón guardar depende de la pregunta) -->
           <div class="form-section-title">Datos extraídos de la etiqueta</div>
           
@@ -126,14 +207,15 @@
             Cancelar
           </button>
           
-          <!-- BOTÓN GUARDAR: Solo activo si el P+X manual es correcto -->
-          <button 
-            type="submit" 
-            class="save-button" 
-            :disabled="!esPxCorrecto"
+          <!-- BOTÓN GUARDAR: Solo activo si P+X es correcto Y confirmación final -->
+          <button
+            type="submit"
+            class="save-button"
+            :disabled="!puedeGuardar"
           >
-            <span v-if="esPxCorrecto">✓ Guardar Registro</span>
-            <span v-else>Responda P+X para continuar</span>
+            <span v-if="puedeGuardar">✓ Guardar Registro</span>
+            <span v-else-if="!esPxCorrecto">Responda P+X para continuar</span>
+            <span v-else>Confirme los datos para continuar</span>
           </button>
         </div>
       </form>
@@ -154,6 +236,7 @@ const emit = defineEmits(['save', 'close'])
 // Estado local para la pregunta
 const px_usuario = ref(null)
 const pxConfirmado = ref(false)
+const confirmacionFinal = ref(false)
 const formData = ref({
   cliente: '',
   producto_db: '',
@@ -199,7 +282,7 @@ const verificarPxEnRango = (cliente, pxValue) => {
   return pxValue >= rango.min && pxValue <= rango.max
 }
 
-// Lógica de comprobación
+// Lógica de comprobación del P+X
 const esPxCorrecto = computed(() => {
   if (!props.data || !props.data.validacion_px) return true // Si no hay validación, permitir guardar
 
@@ -223,6 +306,11 @@ const esPxCorrecto = computed(() => {
 
   // Validar que esté dentro del rango
   return pxValue >= rango.min && pxValue <= rango.max
+})
+
+// Verificar que se haya confirmado la validación final
+const puedeGuardar = computed(() => {
+  return esPxCorrecto.value && confirmacionFinal.value
 })
 
 // Verificar si hay error sanitario REAL
@@ -506,6 +594,155 @@ const closeModal = () => {
 .input-product { background-color: #ffffff; color: #2d3748; }
 .input-product:not([readonly]) { border-color: #f6ad55; background-color: #fffaf0; }
 .input-product:not([readonly]):focus { border-color: #ed8936; box-shadow: 0 0 0 3px rgba(237, 137, 54, 0.1); }
+
+/* ESTILOS DE CONFIRMACIÓN FINAL */
+.confirmation-card {
+  background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%);
+  border: 3px solid #0284c7;
+  border-radius: 20px;
+  padding: 28px;
+  margin-bottom: 30px;
+  display: flex;
+  gap: 20px;
+  box-shadow: 0 12px 28px rgba(2, 132, 199, 0.15);
+  animation: slideDown 0.4s ease-out;
+}
+
+.confirmation-icon {
+  font-size: 40px;
+  background: #0284c7;
+  color: white;
+  width: 70px;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  flex-shrink: 0;
+  font-weight: bold;
+}
+
+.confirmation-body {
+  flex: 1;
+  text-align: left;
+}
+
+.confirmation-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #0284c7;
+  letter-spacing: 1px;
+}
+
+.confirmation-text {
+  margin: 5px 0 15px 0;
+  font-size: 15px;
+  color: #1e3a8a;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.confirmation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 12px;
+}
+
+.confirmation-item {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  background: white;
+  border-radius: 8px;
+  border-left: 3px solid #0284c7;
+}
+
+.confirmation-item-highlight {
+  border-left-color: #16a34a;
+  background: #f0fdf4;
+}
+
+.confirmation-label-small {
+  font-size: 10px;
+  font-weight: 700;
+  color: #0284c7;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.confirmation-item-highlight .confirmation-label-small {
+  color: #16a34a;
+}
+
+.confirmation-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e3a8a;
+  word-break: break-word;
+}
+
+.confirmation-value-highlight {
+  color: #16a34a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.confirmation-question {
+  margin: 20px 0 15px 0;
+  font-size: 16px;
+  color: #1e3a8a;
+  font-weight: 700;
+  text-align: center;
+}
+
+.confirmation-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 15px;
+}
+
+.confirm-final-button {
+  flex: 1;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: white;
+  border: none;
+  padding: 14px 24px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-height: 48px;
+}
+
+.confirm-final-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(2, 132, 199, 0.3);
+}
+
+.cancel-final-button {
+  flex: 1;
+  background: white;
+  color: #dc2626;
+  border: 2px solid #dc2626;
+  padding: 14px 24px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-height: 48px;
+}
+
+.cancel-final-button:hover {
+  background: #fef2f2;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+}
 
 .modal-footer {
   padding: 20px;
