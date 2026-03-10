@@ -167,8 +167,39 @@
             <input v-model="formData.origen" type="text" id="origen" readonly class="input-readonly">
           </div>
           <div class="form-group">
-            <label for="ean">EAN</label>
+            <label for="ean">EAN (Extraído)</label>
             <input v-model="formData.ean" type="text" id="ean" readonly class="input-readonly">
+          </div>
+
+          <!-- CAMPO DE ESCANEO DE EAN -->
+          <div class="form-group">
+            <label for="eanEscaneado">
+              <span class="scan-label">📱 Escanear EAN con pistola</span>
+            </label>
+            <input
+              ref="eanInput"
+              v-model="eanEscaneado"
+              type="text"
+              id="eanEscaneado"
+              placeholder="Escanea el código de barras aquí..."
+              class="input-scan"
+              @keydown.enter="eanValidado = true"
+            >
+
+            <!-- RESULTADO DE VALIDACIÓN DE EAN -->
+            <div v-if="eanEscaneado" class="ean-validation">
+              <div v-if="eanCoincide === true" class="ean-match success">
+                <span class="ean-icon">✅</span>
+                <span class="ean-text">EANs coinciden perfectamente</span>
+              </div>
+              <div v-else-if="eanCoincide === false" class="ean-match error">
+                <span class="ean-icon">❌</span>
+                <span class="ean-text">
+                  <strong>Error:</strong> EAN escaneado no coincide con OCR
+                  <br><small>OCR: {{ formData.ean }} | Escaneado: {{ eanEscaneado }}</small>
+                </span>
+              </div>
+            </div>
           </div>
           <div class="form-group">
             <label for="lote">Lote</label>
@@ -237,6 +268,8 @@ const emit = defineEmits(['save', 'close'])
 const px_usuario = ref(null)
 const pxConfirmado = ref(false)
 const confirmacionFinal = ref(false)
+const eanEscaneado = ref('')
+const eanValidado = ref(false)
 const formData = ref({
   cliente: '',
   producto_db: '',
@@ -310,7 +343,13 @@ const esPxCorrecto = computed(() => {
 
 // Verificar que se haya confirmado la validación final
 const puedeGuardar = computed(() => {
-  return esPxCorrecto.value && confirmacionFinal.value
+  // Debe tener P+X correcto, confirmación final, y EAN debe coincidir (si se escaneó)
+  if (!esPxCorrecto.value || !confirmacionFinal.value) return false
+
+  // Si hay EAN escaneado, DEBE coincidir
+  if (eanEscaneado.value && eanCoincide.value !== true) return false
+
+  return true
 })
 
 // Verificar si hay error sanitario REAL
@@ -332,6 +371,16 @@ const hayErrorSanitarioReal = computed(() => {
   }
 
   return false
+})
+
+// Verificar coincidencia de EANs (OCR vs Escaneado)
+const eanCoincide = computed(() => {
+  if (!eanEscaneado.value) return null // Sin validar si no hay escaneo
+
+  const eanOCR = formData.value.ean?.trim() || ''
+  const eanEscan = eanEscaneado.value.trim()
+
+  return eanOCR === eanEscan
 })
 
 const saveData = () => {
@@ -742,6 +791,82 @@ const closeModal = () => {
 .cancel-final-button:hover {
   background: #fef2f2;
   box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+}
+
+/* ESTILOS DE ESCANEO DE EAN */
+.scan-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.input-scan {
+  width: 100%;
+  padding: 14px;
+  border-radius: 10px;
+  border: 2px solid #667eea;
+  box-sizing: border-box;
+  font-size: 16px;
+  background-color: #f0f4ff;
+  color: #667eea;
+  font-weight: 600;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.input-scan:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+  background-color: white;
+}
+
+.input-scan::placeholder {
+  color: #b4c7ff;
+}
+
+.ean-validation {
+  margin-top: 12px;
+}
+
+.ean-match {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  animation: slideIn 0.3s ease-out;
+}
+
+.ean-match.success {
+  background-color: #f0fdf4;
+  border: 2px solid #22c55e;
+  color: #16a34a;
+}
+
+.ean-match.error {
+  background-color: #fef2f2;
+  border: 2px solid #ef4444;
+  color: #dc2626;
+}
+
+.ean-icon {
+  font-size: 18px;
+}
+
+.ean-text {
+  flex: 1;
+  text-align: left;
+}
+
+.ean-text small {
+  display: block;
+  font-size: 12px;
+  margin-top: 4px;
+  opacity: 0.8;
 }
 
 .modal-footer {
