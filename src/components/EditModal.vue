@@ -290,6 +290,8 @@ watch(() => props.data, (newData) => {
     formData.value = { ...newData }
     px_usuario.value = null
     pxConfirmado.value = false
+    eanEscaneado.value = ''
+    confirmacionFinal.value = false
   }
 }, { immediate: true })
 
