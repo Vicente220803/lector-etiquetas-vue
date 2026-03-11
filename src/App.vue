@@ -313,6 +313,83 @@ function normalizarFecha(fechaStr) {
   return limpia
 }
 
+// Función para reintentar el webhook con lógica de reintentos
+async function enviarWebhookConReintentos(formData, maxReintentos = 2) {
+  const webhookUrlFinal = 'https://surexportlevante.app.n8n.cloud/webhook/guardar-etiqueta'
+  let ultimoError = null
+
+  for (let intento = 1; intento <= maxReintentos; intento++) {
+    try {
+      console.log(`🔄 Intento ${intento}/${maxReintentos} de envío al webhook...`)
+
+      const response = await fetch(webhookUrlFinal, {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        ultimoError = `Error ${response.status}: ${errorText}`
+        console.error(`❌ Intento ${intento} falló:`, ultimoError)
+
+        // Si es error 500 (n8n no pudo procesar), informar específicamente
+        if (response.status === 500) {
+          throw new Error('n8n no pudo analizar la imagen. Comprueba que la etiqueta sea legible y bien orientada.')
+        }
+
+        // Esperar antes de reintentar
+        if (intento < maxReintentos) {
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          continue
+        }
+        throw new Error(ultimoError)
+      }
+
+      const responseData = await response.json()
+      console.log('✅ Webhook exitoso en intento', intento)
+      return responseData
+
+    } catch (error) {
+      ultimoError = error.message
+      console.error(`❌ Error en intento ${intento}:`, error)
+
+      if (intento < maxReintentos) {
+        console.log(`⏳ Esperando 2 segundos antes del próximo intento...`)
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      }
+    }
+  }
+
+  throw new Error(`Webhook falló después de ${maxReintentos} intentos. ${ultimoError}`)
+}
+
+// Función para registrar en Supabase (auditoría)
+async function registrarEnAuditoria(data, estado, detalles = null) {
+  try {
+    const auditLog = {
+      timestamp: new Date().toISOString(),
+      cliente: data.cliente,
+      ean: data.ean,
+      px_usuario: data.px_usuario,
+      estado: estado, // 'GUARDADA', 'ERROR_WEBHOOK', 'ERROR_N8N', etc
+      detalles: detalles,
+      navegador: navigator.userAgent.substring(0, 100)
+    }
+
+    const { error } = await supabase
+      .from('audit_logs')
+      .insert([auditLog])
+
+    if (error) {
+      console.warn('⚠️ No se pudo registrar en auditoría:', error)
+    } else {
+      console.log('📝 Registrado en auditoría:', estado)
+    }
+  } catch (error) {
+    console.warn('⚠️ Error al registrar auditoría:', error)
+  }
+}
+
 async function handleSave(data) {
   isProcessing.value = true
 
@@ -320,8 +397,6 @@ async function handleSave(data) {
     if (!fileToUpload.value) {
       throw new Error("No se encontró la imagen para subir. Por favor, selecciona la imagen de nuevo.");
     }
-
-    const webhookUrlFinal = 'https://surexportlevante.app.n8n.cloud/webhook/guardar-etiqueta'
 
     // Crear FormData con los campos + archivo binario
     const formData = new FormData()
@@ -337,45 +412,38 @@ async function handleSave(data) {
     formData.append('peso_neto', data.peso_neto || '')
     formData.append('importe', data.importe || '')
     formData.append('px_usuario', data.px_usuario || '')
-
-    // Adjuntar el archivo binario real
     formData.append('file', fileToUpload.value)
 
-    // DEBUG: Log para verificar los datos que se envían
-    console.log('📤 Datos enviados al webhook guardar-etiqueta:')
-    console.log('- cliente:', data.cliente)
-    console.log('- producto_db:', data.producto_db)
-    console.log('- origen:', data.origen)
-    console.log('- ean:', data.ean)
-    console.log('- lote:', data.lote)
-    console.log('- codigo_r:', data.codigo_r)
-    console.log('- fecha_envasado:', data.fecha_envasado)
-    console.log('- fecha_caducidad:', data.fecha_caducidad)
-    console.log('- precio_kg:', data.precio_kg)
-    console.log('- peso_neto:', data.peso_neto)
-    console.log('- importe:', data.importe)
-    console.log('- px_usuario:', data.px_usuario)
-    console.log('- file:', fileToUpload.value.name)
+    console.log('📤 Enviando datos al webhook guardar-etiqueta...')
 
-    // Realizar POST al webhook
-    const response = await fetch(webhookUrlFinal, {
-      method: 'POST',
-      body: formData
-    })
+    // Enviar con reintentos
+    const responseData = await enviarWebhookConReintentos(formData, 2)
+    console.log('✅ Respuesta del webhook:', responseData)
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Error del webhook: ${response.status} - ${errorText}`)
-    }
-
-    const responseData = await response.json()
-    console.log('Respuesta del webhook:', responseData)
+    // Registrar en auditoría
+    await registrarEnAuditoria(data, 'GUARDADA', { webhook_exitoso: true })
 
     showModal.value = false
     showSuccessMessage()
 
   } catch (error) {
-    showError('Error al guardar: ' + error.message);
+    const mensajeError = error.message
+    console.error('❌ Error al guardar:', mensajeError)
+
+    // Registrar el error en auditoría
+    await registrarEnAuditoria(data, 'ERROR', {
+      mensaje: mensajeError,
+      tipo: mensajeError.includes('n8n') ? 'ERROR_N8N' : 'ERROR_WEBHOOK'
+    })
+
+    // Mostrar error más amigable
+    if (mensajeError.includes('n8n no pudo analizar')) {
+      showError('❌ n8n no pudo procesar la imagen. Comprueba que: 1) La etiqueta sea clara y legible 2) La foto esté bien enfocada 3) La etiqueta sea válida')
+    } else if (mensajeError.includes('después de 2 intentos')) {
+      showError('⚠️ Error de conexión. Se reintentó 2 veces pero sin éxito. Comprueba tu conexión a internet.')
+    } else {
+      showError(mensajeError)
+    }
   } finally {
     isProcessing.value = false;
   }

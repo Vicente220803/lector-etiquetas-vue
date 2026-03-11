@@ -171,18 +171,31 @@
             <input v-model="formData.ean" type="text" id="ean" readonly class="input-readonly">
           </div>
 
-          <!-- CAMPO DE ESCANEO DE EAN -->
-          <div class="form-group">
+          <!-- CAMPO DE ESCANEO DE EAN - OBLIGATORIO -->
+          <div class="form-group barcode-section" :class="{ 'barcode-pulse': !eanEscaneado && confirmacionFinal }">
             <label for="eanEscaneado">
-              <span class="scan-label">📱 Escanear EAN con pistola</span>
+              <span class="scan-label">
+                <svg class="barcode-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="2" y="3" width="2" height="18" fill="currentColor"/>
+                  <rect x="5" y="3" width="1" height="18" fill="currentColor"/>
+                  <rect x="7" y="3" width="2" height="18" fill="currentColor"/>
+                  <rect x="10" y="3" width="1" height="18" fill="currentColor"/>
+                  <rect x="12" y="3" width="2" height="18" fill="currentColor"/>
+                  <rect x="15" y="3" width="1" height="18" fill="currentColor"/>
+                  <rect x="17" y="3" width="2" height="18" fill="currentColor"/>
+                  <rect x="20" y="3" width="2" height="18" fill="currentColor"/>
+                </svg>
+                Escanear código de barras (OBLIGATORIO)
+              </span>
             </label>
             <input
               ref="eanInput"
               v-model="eanEscaneado"
               type="text"
               id="eanEscaneado"
-              placeholder="Escanea el código de barras aquí..."
+              placeholder="Pistola apuntando aquí..."
               class="input-scan"
+              :class="{ 'input-scan-active': confirmacionFinal && !eanEscaneado }"
               @keydown.enter="eanValidado = true"
             >
 
@@ -190,15 +203,24 @@
             <div v-if="eanEscaneado" class="ean-validation">
               <div v-if="eanCoincide === true" class="ean-match success">
                 <span class="ean-icon">✅</span>
-                <span class="ean-text">EANs coinciden perfectamente</span>
+                <span class="ean-text">
+                  <strong>¡Perfecto!</strong> EANs coinciden
+                </span>
               </div>
               <div v-else-if="eanCoincide === false" class="ean-match error">
                 <span class="ean-icon">❌</span>
                 <span class="ean-text">
-                  <strong>Error:</strong> EAN escaneado no coincide con OCR
-                  <br><small>OCR: {{ formData.ean }} | Escaneado: {{ eanEscaneado }}</small>
+                  <strong>Error:</strong> EAN NO coincide
+                  <br><small>OCR: {{ formData.ean }}</small>
+                  <br><small>Escan: {{ eanEscaneado }}</small>
                 </span>
               </div>
+            </div>
+
+            <!-- ADVERTENCIA SI FALTA ESCANEAR -->
+            <div v-if="confirmacionFinal && !eanEscaneado" class="barcode-required">
+              <span class="pulse-dot"></span>
+              <strong>⚠️ ESCANEA EL CÓDIGO AHORA</strong>
             </div>
           </div>
           <div class="form-group">
@@ -238,7 +260,7 @@
             Cancelar
           </button>
           
-          <!-- BOTÓN GUARDAR: Solo activo si P+X es correcto Y confirmación final -->
+          <!-- BOTÓN GUARDAR: Solo activo si P+X es correcto Y confirmación final Y barcode escaneado -->
           <button
             type="submit"
             class="save-button"
@@ -246,7 +268,8 @@
           >
             <span v-if="puedeGuardar">✓ Guardar Registro</span>
             <span v-else-if="!esPxCorrecto">Responda P+X para continuar</span>
-            <span v-else>Confirme los datos para continuar</span>
+            <span v-else-if="!confirmacionFinal">Confirme los datos para continuar</span>
+            <span v-else>⚠️ Escanee el código de barras</span>
           </button>
         </div>
       </form>
@@ -345,11 +368,11 @@ const esPxCorrecto = computed(() => {
 
 // Verificar que se haya confirmado la validación final
 const puedeGuardar = computed(() => {
-  // Debe tener P+X correcto, confirmación final, y EAN debe coincidir (si se escaneó)
+  // Debe tener P+X correcto, confirmación final
   if (!esPxCorrecto.value || !confirmacionFinal.value) return false
 
-  // Si hay EAN escaneado, DEBE coincidir
-  if (eanEscaneado.value && eanCoincide.value !== true) return false
+  // BARCODE ES OBLIGATORIO - Debe escanear y debe coincidir
+  if (!eanEscaneado.value || eanCoincide.value !== true) return false
 
   return true
 })
@@ -796,16 +819,48 @@ const closeModal = () => {
 }
 
 /* ESTILOS DE ESCANEO DE EAN */
+.barcode-section {
+  position: relative;
+}
+
+.barcode-section.barcode-pulse {
+  animation: barcodePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes barcodePulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
 .scan-label {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 600;
+  gap: 10px;
+  font-weight: 700;
+  color: #667eea;
+}
+
+.barcode-icon {
+  color: #667eea;
+  animation: barcodeGlow 1s ease-in-out infinite;
+}
+
+@keyframes barcodeGlow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
 }
 
 .input-scan {
   width: 100%;
-  padding: 14px;
+  padding: 16px;
   border-radius: 10px;
   border: 2px solid #667eea;
   box-sizing: border-box;
@@ -814,18 +869,70 @@ const closeModal = () => {
   color: #667eea;
   font-weight: 600;
   text-align: center;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .input-scan:focus {
   outline: none;
   border-color: #667eea;
-  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+  box-shadow: 0 0 0 6px rgba(102, 126, 234, 0.15);
   background-color: white;
+  transform: scale(1.01);
+}
+
+.input-scan.input-scan-active {
+  border-color: #f59e0b;
+  border-width: 3px;
+  background-color: #fffbeb;
+  box-shadow: 0 0 0 8px rgba(245, 158, 11, 0.1), inset 0 0 0 2px rgba(245, 158, 11, 0.2);
+  animation: scannerPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes scannerPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 8px rgba(245, 158, 11, 0.1), inset 0 0 0 2px rgba(245, 158, 11, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(245, 158, 11, 0.05), inset 0 0 0 2px rgba(245, 158, 11, 0.3);
+  }
 }
 
 .input-scan::placeholder {
   color: #b4c7ff;
+}
+
+.barcode-required {
+  margin-top: 12px;
+  padding: 12px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 2px solid #f59e0b;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  color: #b45309;
+  animation: slideDown 0.3s ease-out;
+}
+
+.pulse-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background-color: #f59e0b;
+  border-radius: 50%;
+  animation: pulseDot 1.2s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.5;
+  }
 }
 
 .ean-validation {
