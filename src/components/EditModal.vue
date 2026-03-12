@@ -70,86 +70,6 @@
             </div>
           </div>
 
-          <!-- CONFIRMACIÓN FINAL (Solo aparece si P+X es correcto) -->
-          <div v-if="esPxCorrecto && !confirmacionFinal" class="confirmation-card">
-            <div class="confirmation-icon">✓</div>
-            <div class="confirmation-body">
-              <label class="confirmation-label">VERIFICACIÓN FINAL:</label>
-              <p class="confirmation-text">
-                P+X validado correctamente. Ahora verifica que <strong>todos los datos</strong> coincidan con la etiqueta física:
-              </p>
-
-              <div class="confirmation-grid">
-                <div class="confirmation-item">
-                  <span class="confirmation-label-small">Cliente</span>
-                  <span class="confirmation-value">{{ formData.cliente }}</span>
-                </div>
-                <div class="confirmation-item">
-                  <span class="confirmation-label-small">Producto</span>
-                  <span class="confirmation-value">{{ formData.producto_db || 'N/A' }}</span>
-                </div>
-                <div class="confirmation-item">
-                  <span class="confirmation-label-small">Origen</span>
-                  <span class="confirmation-value">{{ formData.origen }}</span>
-                </div>
-                <div class="confirmation-item">
-                  <span class="confirmation-label-small">EAN</span>
-                  <span class="confirmation-value">{{ formData.ean }}</span>
-                </div>
-                <div class="confirmation-item">
-                  <span class="confirmation-label-small">Lote</span>
-                  <span class="confirmation-value">{{ formData.lote }}</span>
-                </div>
-                <div class="confirmation-item">
-                  <span class="confirmation-label-small">Código R</span>
-                  <span class="confirmation-value">{{ formData.codigo_r }}</span>
-                </div>
-                <div class="confirmation-item">
-                  <span class="confirmation-label-small">Envasado</span>
-                  <span class="confirmation-value">{{ formData.fecha_envasado }}</span>
-                </div>
-                <div class="confirmation-item">
-                  <span class="confirmation-label-small">Caducidad</span>
-                  <span class="confirmation-value">{{ formData.fecha_caducidad }}</span>
-                </div>
-                <div class="confirmation-item">
-                  <span class="confirmation-label-small">Precio/Kg</span>
-                  <span class="confirmation-value">{{ formData.precio_kg }}</span>
-                </div>
-                <div class="confirmation-item">
-                  <span class="confirmation-label-small">Peso Neto</span>
-                  <span class="confirmation-value">{{ formData.peso_neto }}</span>
-                </div>
-                <div class="confirmation-item">
-                  <span class="confirmation-label-small">Importe</span>
-                  <span class="confirmation-value">{{ formData.importe }}</span>
-                </div>
-                <div class="confirmation-item confirmation-item-highlight">
-                  <span class="confirmation-label-small">P+X Verificado</span>
-                  <span class="confirmation-value confirmation-value-highlight">{{ px_usuario }} días</span>
-                </div>
-              </div>
-
-              <p class="confirmation-question">¿Todos los datos son correctos?</p>
-
-              <div class="confirmation-buttons">
-                <button
-                  type="button"
-                  @click="confirmacionFinal = true"
-                  class="confirm-final-button"
-                >
-                  ✓ Sí, todo es correcto
-                </button>
-                <button
-                  type="button"
-                  @click="confirmacionFinal = false; pxConfirmado = false"
-                  class="cancel-final-button"
-                >
-                  ✗ No, revisar
-                </button>
-              </div>
-            </div>
-          </div>
 
           <!-- FORMULARIO DE DATOS (Se puede ver pero el botón guardar depende de la pregunta) -->
           <div class="form-section-title">Datos extraídos de la etiqueta</div>
@@ -172,7 +92,7 @@
           </div>
 
           <!-- CAMPO DE ESCANEO DE EAN - OBLIGATORIO -->
-          <div class="form-group barcode-section" :class="{ 'barcode-pulse': !eanEscaneado && confirmacionFinal }">
+          <div class="form-group barcode-section" :class="{ 'barcode-pulse': esPxCorrecto && !eanEscaneado }">
             <label for="eanEscaneado">
               <span class="scan-label">
                 <svg class="barcode-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -195,7 +115,7 @@
               id="eanEscaneado"
               placeholder="Pistola apuntando aquí..."
               class="input-scan"
-              :class="{ 'input-scan-active': confirmacionFinal && !eanEscaneado }"
+              :class="{ 'input-scan-active': esPxCorrecto && !eanEscaneado }"
               @keydown.enter="eanValidado = true"
             >
 
@@ -218,7 +138,7 @@
             </div>
 
             <!-- ADVERTENCIA SI FALTA ESCANEAR -->
-            <div v-if="confirmacionFinal && !eanEscaneado" class="barcode-required">
+            <div v-if="esPxCorrecto && !eanEscaneado" class="barcode-required">
               <span class="pulse-dot"></span>
               <strong>⚠️ ESCANEA EL CÓDIGO AHORA</strong>
             </div>
@@ -260,7 +180,7 @@
             Cancelar
           </button>
           
-          <!-- BOTÓN GUARDAR: Solo activo si P+X es correcto Y confirmación final Y barcode escaneado -->
+          <!-- BOTÓN GUARDAR: Solo activo si P+X es correcto Y barcode escaneado -->
           <button
             type="submit"
             class="save-button"
@@ -268,7 +188,6 @@
           >
             <span v-if="puedeGuardar">✓ Guardar Registro</span>
             <span v-else-if="!esPxCorrecto">Responda P+X para continuar</span>
-            <span v-else-if="!confirmacionFinal">Confirme los datos para continuar</span>
             <span v-else>⚠️ Escanee el código de barras</span>
           </button>
         </div>
@@ -290,7 +209,6 @@ const emit = defineEmits(['save', 'close'])
 // Estado local para la pregunta
 const px_usuario = ref(null)
 const pxConfirmado = ref(false)
-const confirmacionFinal = ref(false)
 const eanEscaneado = ref('')
 const eanValidado = ref(false)
 const formData = ref({
@@ -314,7 +232,6 @@ watch(() => props.data, (newData) => {
     px_usuario.value = null
     pxConfirmado.value = false
     eanEscaneado.value = ''
-    confirmacionFinal.value = false
   }
 }, { immediate: true })
 
@@ -366,10 +283,10 @@ const esPxCorrecto = computed(() => {
   return pxValue >= rango.min && pxValue <= rango.max
 })
 
-// Verificar que se haya confirmado la validación final
+// Verificar que pueda guardar (P+X correcto + EAN coincide)
 const puedeGuardar = computed(() => {
-  // Debe tener P+X correcto, confirmación final
-  if (!esPxCorrecto.value || !confirmacionFinal.value) return false
+  // Debe tener P+X correcto
+  if (!esPxCorrecto.value) return false
 
   // BARCODE ES OBLIGATORIO - Debe escanear y debe coincidir
   if (!eanEscaneado.value || eanCoincide.value !== true) return false
