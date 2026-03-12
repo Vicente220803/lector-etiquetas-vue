@@ -1081,4 +1081,52 @@ h1 {
     height: 20px;
   }
 }
+
+/* TABLET LANDSCAPE (Orientación horizontal) */
+@media (max-height: 600px) and (min-width: 768px) {
+  body {
+    padding: 20px 15px;
+  }
+
+  .container {
+    padding: 25px 20px;
+    max-width: 700px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin-bottom: 20px;
+  }
+
+  .upload-form {
+    gap: 12px;
+  }
+
+  .take-picture-button,
+  .file-label {
+    padding: 12px 20px;
+    font-size: 14px;
+    min-height: 48px;
+  }
+
+  .submit-button {
+    padding: 12px 20px;
+    font-size: 14px;
+    margin-top: 15px;
+    min-height: 48px;
+  }
+
+  .preview-image {
+    max-width: 300px;
+    max-height: 280px;
+  }
+
+  .image-preview {
+    margin: 15px 0;
+  }
+
+  .file-name {
+    font-size: 12px;
+  }
+}
 </style>

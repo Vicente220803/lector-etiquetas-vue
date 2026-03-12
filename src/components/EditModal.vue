@@ -108,16 +108,29 @@
                 Escanear código de barras (OBLIGATORIO)
               </span>
             </label>
-            <input
-              ref="eanInput"
-              v-model="eanEscaneado"
-              type="text"
-              id="eanEscaneado"
-              placeholder="Pistola apuntando aquí..."
-              class="input-scan"
-              :class="{ 'input-scan-active': esPxCorrecto && !eanEscaneado }"
-              @keydown.enter="eanValidado = true"
-            >
+            <div class="scan-input-wrapper">
+              <input
+                ref="eanInput"
+                v-model="eanEscaneado"
+                type="text"
+                id="eanEscaneado"
+                placeholder="Pistola apuntando aquí..."
+                class="input-scan"
+                :class="{ 'input-scan-active': esPxCorrecto && !eanEscaneado }"
+                @keydown.enter="eanValidado = true"
+              >
+              <button
+                v-if="eanEscaneado"
+                type="button"
+                @click="limpiarEan"
+                class="clear-ean-button"
+                aria-label="Borrar código escaneado"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z" fill="currentColor"/>
+                </svg>
+              </button>
+            </div>
 
             <!-- RESULTADO DE VALIDACIÓN DE EAN -->
             <div v-if="eanEscaneado" class="ean-validation">
@@ -348,6 +361,10 @@ const saveData = () => {
 
 const closeModal = () => {
   emit('close')
+}
+
+const limpiarEan = () => {
+  eanEscaneado.value = ''
 }
 </script>
 
@@ -740,6 +757,39 @@ const closeModal = () => {
   position: relative;
 }
 
+.scan-input-wrapper {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.clear-ean-button {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  padding: 12px;
+  border: 2px solid #e53e3e;
+  background: #fff5f5;
+  border-radius: 10px;
+  color: #e53e3e;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  font-weight: 600;
+}
+
+.clear-ean-button:hover {
+  background: #fed7d7;
+  border-color: #dc2626;
+  transform: scale(1.05);
+}
+
+.clear-ean-button:active {
+  transform: scale(0.95);
+}
+
 .barcode-section.barcode-pulse {
   animation: barcodePulse 1.5s ease-in-out infinite;
 }
@@ -776,7 +826,7 @@ const closeModal = () => {
 }
 
 .input-scan {
-  width: 100%;
+  flex: 1;
   padding: 16px;
   border-radius: 10px;
   border: 2px solid #667eea;
@@ -940,5 +990,146 @@ const closeModal = () => {
   background: #cbd5e0;
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+/* TABLET LANDSCAPE */
+@media (max-height: 600px) and (min-width: 768px) {
+  .modal-content {
+    max-height: 95vh;
+    width: 98%;
+    max-width: 1000px;
+  }
+
+  .modal-header {
+    padding: 16px 20px;
+  }
+
+  .modal-header h2 {
+    font-size: 20px;
+  }
+
+  .modal-body {
+    max-height: 65vh;
+    padding: 18px;
+  }
+
+  .question-card {
+    padding: 16px;
+    margin-bottom: 16px;
+    gap: 12px;
+  }
+
+  .question-icon {
+    width: 48px;
+    height: 48px;
+    font-size: 24px;
+  }
+
+  .question-label {
+    font-size: 10px;
+  }
+
+  .question-text {
+    font-size: 13px;
+    margin: 4px 0 10px 0;
+  }
+
+  .input-verify-wrapper {
+    gap: 10px;
+  }
+
+  .px-verify-input {
+    width: 90px !important;
+    height: 44px;
+    font-size: 22px !important;
+  }
+
+  .confirm-px-button {
+    padding: 10px 20px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+
+  .form-section-title {
+    margin: 12px 0 6px 0;
+    font-size: 11px;
+  }
+
+  .form-group {
+    margin-bottom: 12px;
+  }
+
+  .form-group label {
+    margin-bottom: 5px;
+    font-size: 13px;
+  }
+
+  .form-group input {
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .scan-label {
+    gap: 8px;
+    font-size: 14px;
+  }
+
+  .barcode-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .input-scan {
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .clear-ean-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .ean-match {
+    padding: 10px;
+    font-size: 13px;
+  }
+
+  .barcode-required {
+    margin-top: 8px;
+    padding: 8px;
+    font-size: 13px;
+  }
+
+  .modal-footer {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .cancel-button,
+  .save-button {
+    padding: 14px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+
+  .px-success-banner {
+    padding: 12px 16px;
+    margin-bottom: 14px;
+    font-size: 14px;
+  }
+
+  .critical-alert {
+    padding: 12px;
+    margin-bottom: 14px;
+    font-size: 12px;
+  }
+
+  .critical-alert strong {
+    font-size: 12px;
+  }
+
+  .critical-alert p {
+    font-size: 12px;
+  }
 }
 </style>
