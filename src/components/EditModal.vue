@@ -994,10 +994,15 @@ const limpiarEan = () => {
 
 /* TABLET LANDSCAPE */
 @media (max-height: 600px) and (min-width: 768px) {
+  .modal-overlay {
+    padding: 10px;
+  }
+
   .modal-content {
     max-height: 95vh;
-    width: 98%;
-    max-width: 1000px;
+    width: 100%;
+    max-width: none;
+    border-radius: 16px;
   }
 
   .modal-header {
@@ -1009,7 +1014,7 @@ const limpiarEan = () => {
   }
 
   .modal-body {
-    max-height: 65vh;
+    max-height: 70vh;
     padding: 18px;
   }
 
