@@ -543,6 +543,13 @@ body {
   color: #2d3748;
 }
 
+/* Ajuste para pantallas verticales pequeñas */
+@media (max-width: 600px) and (max-aspect-ratio: 1) {
+  body {
+    padding: 8px 10px;
+  }
+}
+
 .container {
   background-color: white;
   padding: 50px;
@@ -556,6 +563,15 @@ body {
   animation: slideUp 0.6s ease-out;
   margin-bottom: 20px;
   backdrop-filter: blur(10px);
+}
+
+/* Ajuste para pantallas verticales pequeñas */
+@media (max-width: 600px) and (max-aspect-ratio: 1) {
+  .container {
+    padding: 20px 16px;
+    margin-bottom: 10px;
+    border-radius: 16px;
+  }
 }
 
 .camera-section {
@@ -597,11 +613,26 @@ h1 {
   text-transform: uppercase;
 }
 
+/* Ajuste para pantallas verticales pequeñas */
+@media (max-width: 600px) and (max-aspect-ratio: 1) {
+  h1 {
+    margin-bottom: 15px;
+    font-size: 24px;
+  }
+}
+
 .upload-form {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 18px;
+}
+
+/* Ajuste para pantallas verticales pequeñas */
+@media (max-width: 600px) and (max-aspect-ratio: 1) {
+  .upload-form {
+    gap: 8px;
+  }
 }
 
 .take-picture-button {
@@ -621,6 +652,16 @@ h1 {
   gap: 12px;
   box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
   min-height: 60px;
+}
+
+/* Ajuste para pantallas verticales pequeñas */
+@media (max-width: 600px) and (max-aspect-ratio: 1) {
+  .take-picture-button {
+    padding: 12px 16px;
+    font-size: 14px;
+    min-height: 44px;
+    gap: 8px;
+  }
 }
 
 .take-picture-button:hover {
@@ -651,6 +692,16 @@ h1 {
   gap: 10px;
 }
 
+/* Ajuste para pantallas verticales pequeñas */
+@media (max-width: 600px) and (max-aspect-ratio: 1) {
+  .file-label {
+    padding: 12px 16px;
+    font-size: 13px;
+    min-height: 44px;
+    gap: 8px;
+  }
+}
+
 .file-label:hover {
   background-color: #f1f5f9;
   border-color: #667eea;
@@ -667,6 +718,14 @@ h1 {
   font-style: italic;
   color: #718096;
   font-size: 14px;
+}
+
+/* Ajuste para pantallas verticales pequeñas */
+@media (max-width: 600px) and (max-aspect-ratio: 1) {
+  .file-name {
+    margin-top: 4px;
+    font-size: 12px;
+  }
 }
 
 .submit-button {
@@ -687,6 +746,17 @@ h1 {
   align-items: center;
   justify-content: center;
   gap: 12px;
+}
+
+/* Ajuste para pantallas verticales pequeñas */
+@media (max-width: 600px) and (max-aspect-ratio: 1) {
+  .submit-button {
+    padding: 12px 16px;
+    font-size: 14px;
+    margin-top: 8px;
+    min-height: 44px;
+    gap: 8px;
+  }
 }
 
 .submit-button:hover:not(:disabled) {
@@ -768,6 +838,13 @@ h1 {
   backdrop-filter: blur(10px);
 }
 
+/* Ajuste para pantallas verticales pequeñas */
+@media (max-width: 600px) and (max-aspect-ratio: 1) {
+  .image-preview {
+    margin: 8px 0;
+  }
+}
+
 .image-preview:hover {
   transform: scale(1.03) translateY(-2px);
   box-shadow: 0 12px 35px rgba(0, 0, 0, 0.15);
@@ -779,6 +856,15 @@ h1 {
   height: auto;
   display: block;
   border-radius: 12px;
+}
+
+/* Ajuste para pantallas verticales pequeñas */
+@media (max-width: 600px) and (max-aspect-ratio: 1) {
+  .preview-image {
+    max-width: 280px;
+    max-height: 200px;
+    object-fit: contain;
+  }
 }
 
 .clear-image-button {
@@ -887,9 +973,30 @@ h1 {
   backdrop-filter: blur(20px);
 }
 
+/* Ajuste para pantallas verticales pequeñas */
+@media (max-width: 600px) and (max-aspect-ratio: 1) {
+  .success-modal-content {
+    padding: 24px 20px;
+    margin: 10px;
+    max-width: 90%;
+  }
+}
+
 .success-icon {
   margin-bottom: 20px;
   animation: bounceIn 0.6s ease-out;
+}
+
+/* Ajuste para pantallas verticales pequeñas */
+@media (max-width: 600px) and (max-aspect-ratio: 1) {
+  .success-icon {
+    margin-bottom: 12px;
+  }
+
+  .success-icon svg {
+    width: 48px !important;
+    height: 48px !important;
+  }
 }
 
 @keyframes bounceIn {
@@ -921,6 +1028,19 @@ h1 {
   margin: 0 0 30px 0;
   font-size: 16px;
   line-height: 1.5;
+}
+
+/* Ajuste para pantallas verticales pequeñas */
+@media (max-width: 600px) and (max-aspect-ratio: 1) {
+  .success-modal-content h3 {
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+
+  .success-modal-content p {
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
 }
 
 .success-button {
@@ -959,6 +1079,14 @@ h1 {
   .success-button {
     padding: 12px 24px;
     font-size: 15px;
+  }
+}
+
+/* Ajuste para pantallas verticales pequeñas */
+@media (max-width: 600px) and (max-aspect-ratio: 1) {
+  .success-button {
+    padding: 12px 20px;
+    font-size: 14px;
   }
 }
 
@@ -1014,40 +1142,6 @@ h1 {
   }
 }
 
-@media (max-width: 600px) {
-  body {
-    padding: 20px 10px;
-  }
-
-  .container {
-    padding: 30px 20px;
-    margin: 0 10px;
-    margin-bottom: 15px;
-  }
-
-  .camera-section {
-    padding: 0;
-  }
-
-  h1 {
-    font-size: 24px;
-  }
-
-  .upload-form {
-    gap: 12px;
-  }
-
-  .take-picture-button,
-  .file-label,
-  .submit-button {
-    padding: 14px 24px;
-    font-size: 15px;
-  }
-
-  .file-name {
-    font-size: 13px;
-  }
-}
 
 @media (max-width: 480px) {
   .container {
