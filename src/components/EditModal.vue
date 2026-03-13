@@ -260,7 +260,8 @@ const pxRangosPorCliente = {
   'LIDL': { min: 8, max: 9 },
   'ALDI': { min: 8, max: 9 },
   'DELMONTE': { min: 8, max: 9 },
-  'MERCADONA SA': { min: 5, max: 5 }
+  'MERCADONA SA': { min: 5, max: 5 },
+  'Maskom': { min: 8, max: 9 }
 }
 
 // Función para verificar si el P+X está dentro del rango aceptable
