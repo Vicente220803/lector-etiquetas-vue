@@ -60,16 +60,31 @@ const stopCamera = () => {
 }
 
 const captureImage = () => {
+  if (!video.value || !video.value.videoWidth) {
+    console.error('❌ Video no está listo')
+    return
+  }
+
   const canvas = document.createElement('canvas')
   canvas.width = video.value.videoWidth
   canvas.height = video.value.videoHeight
   canvas.getContext('2d').drawImage(video.value, 0, 0, canvas.width, canvas.height)
 
-  canvas.toBlob(blob => {
-    const file = new File([blob], 'captura.jpg', { type: 'image/jpeg' })
-    emit('imageCaptured', file)
-    stopCamera()
-  }, 'image/jpeg')
+  // Usar Promise para esperar a que toBlob termine
+  canvas.toBlob(
+    blob => {
+      if (!blob) {
+        console.error('❌ Error: blob es null')
+        return
+      }
+      const file = new File([blob], 'captura.jpg', { type: 'image/jpeg' })
+      console.log('✅ Imagen capturada:', file.name, file.size, 'bytes')
+      emit('imageCaptured', file)
+      stopCamera()
+    },
+    'image/jpeg',
+    0.95
+  )
 }
 
 onMounted(() => {

@@ -339,24 +339,28 @@ const eanCoincide = computed(() => {
 })
 
 const saveData = () => {
-  if (esPxCorrecto.value) {
-    const cleanData = {
-      cliente: formData.value.cliente,
-      producto_db: formData.value.producto_db,
-      origen: formData.value.origen,
-      ean: formData.value.ean,
-      lote: formData.value.lote,
-      fecha_envasado: formData.value.fecha_envasado,
-      fecha_caducidad: formData.value.fecha_caducidad,
-      codigo_r: formData.value.codigo_r,
-      precio_kg: formData.value.precio_kg,
-      peso_neto: formData.value.peso_neto,
-      importe: formData.value.importe,
-      px_usuario: px_usuario.value
-    }
-    emit('save', cleanData)
-    emit('close')
+  // Validación completa: NO ENVIAR SI HAY CUALQUIER ERROR
+  if (!puedeGuardar.value) {
+    console.warn('❌ Validación fallida - No se envía nada')
+    return
   }
+
+  const cleanData = {
+    cliente: formData.value.cliente,
+    producto_db: formData.value.producto_db,
+    origen: formData.value.origen,
+    ean: formData.value.ean,
+    lote: formData.value.lote,
+    fecha_envasado: formData.value.fecha_envasado,
+    fecha_caducidad: formData.value.fecha_caducidad,
+    codigo_r: formData.value.codigo_r,
+    precio_kg: formData.value.precio_kg,
+    peso_neto: formData.value.peso_neto,
+    importe: formData.value.importe,
+    px_usuario: px_usuario.value
+  }
+  emit('save', cleanData)
+  emit('close')
 }
 
 const closeModal = () => {

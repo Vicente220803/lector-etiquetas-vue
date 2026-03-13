@@ -76,7 +76,7 @@
         </div>
       </div>
 
-      <button type="submit" :disabled="isProcessing" class="submit-button" :aria-label="isProcessing ? 'Procesando imagen...' : 'Enviar imagen para análisis'">
+      <button type="submit" :disabled="isProcessing || isCapturingImage" class="submit-button" :aria-label="isProcessing ? 'Procesando imagen...' : isCapturingImage ? 'Preparando imagen...' : 'Enviar imagen para análisis'">
         <svg v-if="!isProcessing" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -127,6 +127,7 @@ const extractedData = ref(null)
 const showImagePreview = ref(false)
 const previewImageUrl = ref('')
 const showSuccessModal = ref(false)
+const isCapturingImage = ref(false)
 let capturedImageFile = null
 const fileToUpload = ref(null) 
 
@@ -152,8 +153,9 @@ const closeCamera = () => {
 }
 
 const handleImageCaptured = (file) => {
+  isCapturingImage.value = true
   capturedImageFile = file
-  fileToUpload.value = file 
+  fileToUpload.value = file
   fileName.value = `Imagen capturada: ${file.name}`
 
   const cacheKey = file.name + file.size
@@ -164,6 +166,11 @@ const handleImageCaptured = (file) => {
     previewImageUrl.value = url
     imageCache.set(cacheKey, url)
   }
+
+  // Permitir que se envíe la imagen después de 500ms
+  setTimeout(() => {
+    isCapturingImage.value = false
+  }, 500)
 
   closeCamera()
 }
@@ -543,7 +550,7 @@ body {
   box-shadow: 0 25px 50px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.05);
   text-align: center;
   width: 100%;
-  max-width: 600px;
+  max-width: 90%;
   position: relative;
   overflow: hidden;
   animation: slideUp 0.6s ease-out;
@@ -553,7 +560,6 @@ body {
 
 .camera-section {
   width: 100%;
-  max-width: 600px;
   margin: 0 auto;
 }
 
@@ -1090,7 +1096,7 @@ h1 {
 
   .container {
     padding: 25px 20px;
-    max-width: 700px;
+    max-width: 95%;
   }
 
   h1 {
