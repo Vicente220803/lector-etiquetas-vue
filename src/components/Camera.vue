@@ -100,33 +100,21 @@ onUnmounted(() => {
 
 <style scoped>
 .camera-container {
-  margin-top: 24px;
-  background-color: white;
-  border-radius: 20px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.05);
-  overflow: hidden;
-  animation: cameraSlideIn 0.4s ease-out;
-  backdrop-filter: blur(10px);
-}
-
-@keyframes cameraSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: black;
 }
 
 .camera-header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 20px;
+  padding: 12px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .camera-header h3 {
@@ -142,33 +130,27 @@ onUnmounted(() => {
   padding: 8px;
   border-radius: 8px;
   cursor: pointer;
-  transition: background-color 0.3s ease;
-}
-
-.close-camera-button:hover {
-  background: rgba(255, 255, 255, 0.3);
 }
 
 .video-wrapper {
   position: relative;
-  background-color: white;
-  padding: 20px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
 video {
   width: 100%;
-  border-radius: 12px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-  max-height: 400px;
+  height: 100%;
   object-fit: cover;
 }
 
 .camera-overlay {
   position: absolute;
-  top: 20px;
-  left: 20px;
-  right: 20px;
-  bottom: 20px;
+  inset: 0;
   pointer-events: none;
   display: flex;
   align-items: center;
@@ -216,16 +198,16 @@ video {
 }
 
 .camera-controls {
-  padding: 20px;
-  background-color: #f8fafc;
-  border-top: 1px solid #e2e8f0;
+  padding: 16px 20px;
+  background-color: rgba(0, 0, 0, 0.85);
+  flex-shrink: 0;
 }
 
 .capture-button {
   background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
   color: white;
   border: none;
-  padding: 18px 32px;
+  padding: 16px 32px;
   font-size: 16px;
   font-weight: 600;
   border-radius: 14px;
@@ -235,40 +217,6 @@ video {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 15px rgba(72, 187, 120, 0.2);
-}
-
-.capture-button:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 30px rgba(72, 187, 120, 0.4);
-}
-
-/* Responsive */
-@media (max-width: 600px) {
-  .camera-header {
-    padding: 15px;
-  }
-
-  .camera-header h3 {
-    font-size: 16px;
-  }
-
-  .video-wrapper {
-    padding: 15px;
-  }
-
-  video {
-    max-height: 300px;
-  }
-
-  .camera-controls {
-    padding: 15px;
-  }
-
-  .capture-button {
-    padding: 14px 24px;
-    font-size: 15px;
-  }
+  box-shadow: 0 4px 15px rgba(72, 187, 120, 0.3);
 }
 </style>
