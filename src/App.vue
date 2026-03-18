@@ -279,7 +279,7 @@ const validacionPx = ref(null)
 const ultimoRegistro = ref(null)
 
 // --- LISTS (Responsable names - placeholder, user will provide) ---
-const listaResponsables = ref(['Aurora', 'Carlos', 'María', 'Pedro', 'Laura'])
+const listaResponsables = ref(['Aurora', 'Mónica', 'Carla', 'Jorge', 'Franco'])
 
 // --- COMPUTED ---
 const fechaHoy = new Date()
