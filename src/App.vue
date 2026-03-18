@@ -136,14 +136,6 @@
       <!-- Hidden file input -->
       <input ref="fileInput" type="file" accept="image/*" @change="handleFileChange" class="hidden-input">
 
-      <!-- Camera section -->
-      <div v-if="showCamera" class="camera-section">
-        <Camera
-          :show-camera="showCamera"
-          @image-captured="handleImageCaptured"
-          @close-camera="closeCamera"
-        />
-      </div>
 
       <!-- Processing overlay -->
       <div v-if="isProcessing" class="processing-overlay">
@@ -190,6 +182,15 @@
     </div>
 
     <!-- MODALS -->
+    <!-- Camera modal -->
+    <div v-if="showCamera" class="camera-modal">
+      <Camera
+        :show-camera="showCamera"
+        @image-captured="handleImageCaptured"
+        @close-camera="closeCamera"
+      />
+    </div>
+
     <!-- Image zoom -->
     <div v-if="showImagePreview" class="modal-overlay" @click="showImagePreview = false">
       <div class="zoom-content" @click.stop>
@@ -333,6 +334,15 @@ const puedeGuardar = computed(() => {
   if (px_usuario.value === null || px_usuario.value === '') return false
   if (datosExtraidos.value && !eanEscaneado.value) return false
   if (datosExtraidos.value && eanCoincide.value === false) return false
+  // Bloquear si P+X es incorrecto
+  if (estadoGeneral.value === 'KO') return false
+  // Campos obligatorios tras OCR
+  if (datosExtraidos.value) {
+    if (!formData.value.lote) return false
+    if (!formData.value.ean) return false
+    if (!formData.value.fecha_caducidad) return false
+    if (!formData.value.cliente) return false
+  }
   return true
 })
 
@@ -928,8 +938,11 @@ const showError = (message) => {
 .badge-ko { background: #fed7d7; color: #9b2c2c; }
 
 /* ========== CAMERA ========== */
-.camera-section {
-  margin-top: 12px;
+.camera-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: black;
 }
 
 /* ========== PROCESSING ========== */
