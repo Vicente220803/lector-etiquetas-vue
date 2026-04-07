@@ -1,13 +1,46 @@
 <template>
   <div class="app">
+    <!-- PANTALLA INICIO TURNO (cuando no hay turno activo) -->
+    <div v-if="!turnoActivo" class="turno-screen">
+      <div class="turno-card">
+        <div class="turno-icon">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#1a365d" stroke-width="2"/><path d="M12 6v6l4 2" stroke="#1a365d" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <h2 class="turno-title">CONTROL ETIQUETADO IV GAMA</h2>
+        <p class="turno-subtitle">Selecciona el responsable e inicia el turno para comenzar a analizar etiquetas</p>
+        <div class="turno-fecha">{{ fechaHoyFormato }} ({{ diaJuliano }})</div>
+        <div class="turno-field">
+          <label class="field-label">RESPONSABLE DEL TURNO</label>
+          <select v-model="responsableTurno" class="field-input field-select turno-select" :class="{ 'field-placeholder': !responsableTurno }">
+            <option value="" disabled>Seleccionar responsable</option>
+            <option v-for="r in listaResponsables" :key="r" :value="r">{{ r }}</option>
+          </select>
+        </div>
+        <button
+          class="btn-iniciar-turno"
+          :disabled="!responsableTurno"
+          @click="showConfirmIniciar = true"
+        >
+          INICIAR TURNO
+        </button>
+      </div>
+    </div>
+
+    <!-- CONTENIDO PRINCIPAL (solo cuando hay turno activo) -->
+    <template v-else>
     <!-- HEADER -->
     <header class="app-header">
       <div class="header-title">
         <h1>CONTROL ETIQUETADO IV GAMA</h1>
-        <p class="subtitle">un registro para cada producto y fecha de caducidad al inicio de la fabricación</p>
+        <p class="subtitle">Turno iniciado por <strong>{{ responsableTurno }}</strong> a las {{ turnoInicioHora }}</p>
       </div>
-      <div class="header-date">
-        {{ fechaHoyFormato }} ({{ diaJuliano }})
+      <div class="header-actions">
+        <div class="header-date">
+          {{ fechaHoyFormato }} ({{ diaJuliano }})
+        </div>
+        <button class="btn-finalizar-turno-header" @click="showConfirmFinalizar = true">
+          FINALIZAR TURNO ({{ registrosTurno.length }})
+        </button>
       </div>
     </header>
 
@@ -218,6 +251,40 @@
         <button @click="showPxAlert = false" class="btn-continuar">Entendido</button>
       </div>
     </div>
+
+    </template><!-- fin v-else turno activo -->
+
+    <!-- Modal confirmar INICIAR turno -->
+    <div v-if="showConfirmIniciar" class="modal-overlay">
+      <div class="confirm-content" @click.stop>
+        <div class="confirm-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#2b6cb0" stroke-width="2"/><path d="M12 8v4M12 16h.01" stroke="#2b6cb0" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <h3>Vas a iniciar el turno</h3>
+        <p>Responsable: <strong>{{ responsableTurno }}</strong></p>
+        <p class="confirm-detail">Una vez iniciado, podras analizar etiquetas hasta que finalices el turno.</p>
+        <div class="confirm-buttons">
+          <button class="btn-cancelar" @click="showConfirmIniciar = false">Cancelar</button>
+          <button class="btn-confirmar" @click="iniciarTurno">Si, iniciar turno</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal confirmar FINALIZAR turno -->
+    <div v-if="showConfirmFinalizar" class="modal-overlay">
+      <div class="confirm-content" @click.stop>
+        <div class="confirm-icon confirm-icon-warn">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#c53030" stroke-width="2"/><path d="M12 9v4M12 17h.01" stroke="#c53030" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <h3>Vas a finalizar el turno</h3>
+        <p>Se han registrado <strong>{{ registrosTurno.length }}</strong> etiqueta(s) durante este turno.</p>
+        <p class="confirm-detail">Se generara un informe con todos los registros del turno. Esta accion no se puede deshacer.</p>
+        <div class="confirm-buttons">
+          <button class="btn-cancelar" @click="showConfirmFinalizar = false">Cancelar</button>
+          <button class="btn-confirmar btn-confirmar-danger" @click="finalizarTurno">Si, finalizar turno</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -230,6 +297,14 @@ const webhookUrl = 'https://surexportlevante.app.n8n.cloud/webhook/4efe3070-e61a
 
 // --- MODO REAL ACTIVADO ---
 const isSimulationMode = ref(false)
+
+// --- TURNO STATE ---
+const turnoActivo = ref(false)
+const turnoInicioHora = ref('')
+const responsableTurno = ref('')
+const registrosTurno = ref([])
+const showConfirmIniciar = ref(false)
+const showConfirmFinalizar = ref(false)
 
 // --- UI STATE ---
 const fileInput = ref(null)
@@ -647,6 +722,9 @@ const guardarRegistro = async () => {
     }, 'GUARDADA', { webhook_exitoso: true })
 
     // Save as last entry
+    const now = new Date()
+    const horaRegistro = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+
     ultimoRegistro.value = {
       producto: producto.value || formData.value.producto_db,
       px: px_usuario.value,
@@ -655,6 +733,19 @@ const guardarRegistro = async () => {
       id: responseData?.id || Math.floor(Math.random() * 9999),
       imagen: previewImageUrl.value
     }
+
+    // Acumular registro en el turno
+    registrosTurno.value.push({
+      cliente: formData.value.cliente,
+      producto: producto.value || formData.value.producto_db,
+      ean: formData.value.ean,
+      lote: formData.value.lote,
+      fecha_envasado: formData.value.fecha_envasado,
+      fecha_caducidad: formData.value.fecha_caducidad,
+      px: px_usuario.value,
+      estado: estadoGeneral.value,
+      hora: horaRegistro
+    })
 
     showSuccessModal.value = true
 
@@ -680,6 +771,110 @@ const guardarRegistro = async () => {
   } finally {
     isProcessing.value = false
   }
+}
+
+// --- TURNO FUNCTIONS ---
+const iniciarTurno = () => {
+  turnoActivo.value = true
+  const now = new Date()
+  turnoInicioHora.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  responsable.value = responsableTurno.value
+  registrosTurno.value = []
+  showConfirmIniciar.value = false
+}
+
+const finalizarTurno = () => {
+  showConfirmFinalizar.value = false
+  generarInformeTurno()
+  turnoActivo.value = false
+  turnoInicioHora.value = ''
+  registrosTurno.value = []
+  responsableTurno.value = ''
+  responsable.value = ''
+  resetApp()
+}
+
+const generarInformeTurno = () => {
+  const now = new Date()
+  const horaFin = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  const registros = registrosTurno.value
+
+  let filasHTML = ''
+  registros.forEach((r, i) => {
+    filasHTML += `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${r.cliente || '-'}</td>
+        <td>${r.producto || '-'}</td>
+        <td>${r.ean || '-'}</td>
+        <td>${r.lote || '-'}</td>
+        <td>${r.fecha_envasado || '-'}</td>
+        <td>${r.fecha_caducidad || '-'}</td>
+        <td>${r.px || '-'}</td>
+        <td>${r.estado || 'OK'}</td>
+        <td>${r.hora || '-'}</td>
+      </tr>`
+  })
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Informe Turno - ${fechaHoyFormato.value}</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; color: #1a202c; }
+  h1 { color: #1a365d; font-size: 22px; margin-bottom: 4px; }
+  .info { background: #edf2f7; padding: 14px 18px; border-radius: 8px; margin-bottom: 20px; }
+  .info p { margin: 4px 0; font-size: 14px; }
+  .info strong { color: #1a365d; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #1a365d; color: white; padding: 10px 8px; text-align: left; }
+  td { padding: 8px; border-bottom: 1px solid #e2e8f0; }
+  tr:nth-child(even) { background: #f7fafc; }
+  .total { margin-top: 16px; font-size: 15px; font-weight: bold; color: #1a365d; }
+  @media print { body { margin: 0; } }
+</style>
+</head>
+<body>
+  <h1>INFORME DE TURNO - CONTROL ETIQUETADO IV GAMA</h1>
+  <div class="info">
+    <p><strong>Fecha:</strong> ${fechaHoyFormato.value}</p>
+    <p><strong>Responsable:</strong> ${responsableTurno.value}</p>
+    <p><strong>Hora inicio:</strong> ${turnoInicioHora.value}</p>
+    <p><strong>Hora fin:</strong> ${horaFin}</p>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Cliente</th>
+        <th>Producto</th>
+        <th>EAN</th>
+        <th>Lote</th>
+        <th>F. Envasado</th>
+        <th>F. Caducidad</th>
+        <th>P+X</th>
+        <th>Estado</th>
+        <th>Hora</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${filasHTML || '<tr><td colspan="10" style="text-align:center;color:#a0aec0;">No se registraron etiquetas en este turno</td></tr>'}
+    </tbody>
+  </table>
+  <p class="total">Total etiquetas registradas: ${registros.length}</p>
+</body>
+</html>`
+
+  const blob = new Blob([html], { type: 'text/html' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `informe_turno_${fechaHoyFormato.value.replace(/\//g, '-')}_${responsableTurno.value}.html`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 // --- RESET ---
@@ -726,6 +921,178 @@ const showError = (message) => {
 </script>
 
 <style scoped>
+/* ========== TURNO SCREEN ========== */
+.turno-screen {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.turno-card {
+  background: white;
+  border-radius: 20px;
+  padding: 40px 36px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.turno-icon { margin-bottom: 16px; }
+
+.turno-title {
+  font-size: 22px;
+  font-weight: 900;
+  color: #1a365d;
+  margin: 0 0 8px;
+}
+
+.turno-subtitle {
+  font-size: 14px;
+  color: #718096;
+  margin: 0 0 16px;
+  line-height: 1.4;
+}
+
+.turno-fecha {
+  background: #fef9c3;
+  border: 2px solid #d4a017;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 700;
+  font-size: 16px;
+  color: #1a202c;
+  display: inline-block;
+  margin-bottom: 24px;
+}
+
+.turno-field {
+  text-align: left;
+  margin-bottom: 24px;
+}
+
+.turno-select {
+  font-size: 16px;
+}
+
+.btn-iniciar-turno {
+  background: linear-gradient(135deg, #38a169, #2f855a);
+  color: white;
+  border: none;
+  padding: 16px 40px;
+  font-size: 18px;
+  font-weight: 800;
+  border-radius: 12px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 15px rgba(56, 161, 105, 0.4);
+  width: 100%;
+}
+.btn-iniciar-turno:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(56, 161, 105, 0.5);
+}
+.btn-iniciar-turno:disabled {
+  background: #a0aec0;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ========== FINALIZAR TURNO HEADER BUTTON ========== */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.btn-finalizar-turno-header {
+  background: linear-gradient(135deg, #e53e3e, #c53030);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-finalizar-turno-header:hover {
+  background: linear-gradient(135deg, #c53030, #9b2c2c);
+  transform: translateY(-1px);
+}
+
+/* ========== CONFIRM MODALS ========== */
+.confirm-content {
+  background: white;
+  border-radius: 20px;
+  padding: 36px;
+  text-align: center;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+}
+.confirm-content h3 {
+  margin: 16px 0 8px;
+  font-size: 20px;
+  color: #1a202c;
+}
+.confirm-content p {
+  color: #4a5568;
+  margin: 4px 0;
+  font-size: 15px;
+}
+.confirm-detail {
+  color: #718096 !important;
+  font-size: 13px !important;
+  margin-top: 8px !important;
+  margin-bottom: 20px !important;
+}
+.confirm-icon { margin-bottom: 4px; }
+
+.confirm-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+.btn-cancelar {
+  flex: 1;
+  padding: 12px;
+  border: 2px solid #e2e8f0;
+  background: white;
+  color: #4a5568;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-cancelar:hover { background: #f7fafc; border-color: #cbd5e0; }
+
+.btn-confirmar {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  background: linear-gradient(135deg, #38a169, #2f855a);
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-confirmar:hover { transform: translateY(-1px); }
+
+.btn-confirmar-danger {
+  background: linear-gradient(135deg, #e53e3e, #c53030);
+}
+
 /* ========== HEADER ========== */
 .app-header {
   background: linear-gradient(135deg, #8fa4bd 0%, #a8bad0 50%, #c5d0dc 100%);
@@ -1213,17 +1580,25 @@ const showError = (message) => {
 
   .header-title h1 { font-size: 18px; }
   .header-date { font-size: 13px; padding: 6px 10px; }
+
+  .header-actions { flex-direction: column; gap: 6px; }
 }
 
 @media (max-width: 600px) {
+  .turno-card { padding: 28px 20px; }
+  .turno-title { font-size: 18px; }
+  .btn-iniciar-turno { font-size: 16px; padding: 14px; }
+
   .app-header {
     padding: 10px 12px;
     gap: 8px;
+    flex-wrap: wrap;
   }
   .header-title h1 { font-size: 15px; }
   .subtitle { font-size: 10px; }
   .header-date { font-size: 11px; padding: 4px 8px; }
   .back-btn { width: 36px; height: 36px; }
+  .btn-finalizar-turno-header { font-size: 11px; padding: 6px 10px; }
 
   .form-panel { padding: 10px; }
   .row-4col, .row-3col {
