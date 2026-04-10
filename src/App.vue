@@ -292,6 +292,7 @@
 import { ref, computed, watch } from 'vue'
 import Camera from './components/Camera.vue'
 import { supabase } from './supabase.js'
+import { jsPDF } from 'jspdf'
 
 const webhookUrl = 'https://surexportlevante.app.n8n.cloud/webhook/4efe3070-e61a-4d03-9eef-052ed5508cab'
 
@@ -735,6 +736,7 @@ const guardarRegistro = async () => {
     }
 
     // Acumular registro en el turno
+    const imagenBase64 = await blobUrlToBase64(previewImageUrl.value)
     registrosTurno.value.push({
       cliente: formData.value.cliente,
       producto: producto.value || formData.value.producto_db,
@@ -744,7 +746,8 @@ const guardarRegistro = async () => {
       fecha_caducidad: formData.value.fecha_caducidad,
       px: px_usuario.value,
       estado: estadoGeneral.value,
-      hora: horaRegistro
+      hora: horaRegistro,
+      imagen: imagenBase64
     })
 
     showSuccessModal.value = true
@@ -773,6 +776,17 @@ const guardarRegistro = async () => {
   }
 }
 
+// --- HELPERS ---
+const blobUrlToBase64 = async (url) => {
+  const r = await fetch(url)
+  const blob = await r.blob()
+  return new Promise(resolve => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(reader.result)
+    reader.readAsDataURL(blob)
+  })
+}
+
 // --- TURNO FUNCTIONS ---
 const iniciarTurno = () => {
   turnoActivo.value = true
@@ -783,9 +797,9 @@ const iniciarTurno = () => {
   showConfirmIniciar.value = false
 }
 
-const finalizarTurno = () => {
+const finalizarTurno = async () => {
   showConfirmFinalizar.value = false
-  generarInformeTurno()
+  await generarInformeTurno()
   turnoActivo.value = false
   turnoInicioHora.value = ''
   registrosTurno.value = []
@@ -794,87 +808,114 @@ const finalizarTurno = () => {
   resetApp()
 }
 
-const generarInformeTurno = () => {
+const generarInformeTurno = async () => {
   const now = new Date()
   const horaFin = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   const registros = registrosTurno.value
+  const fecha = fechaHoyFormato.value
+  const responsable = responsableTurno.value
 
-  let filasHTML = ''
-  registros.forEach((r, i) => {
-    filasHTML += `
-      <tr>
-        <td>${i + 1}</td>
-        <td>${r.cliente || '-'}</td>
-        <td>${r.producto || '-'}</td>
-        <td>${r.ean || '-'}</td>
-        <td>${r.lote || '-'}</td>
-        <td>${r.fecha_envasado || '-'}</td>
-        <td>${r.fecha_caducidad || '-'}</td>
-        <td>${r.px || '-'}</td>
-        <td>${r.estado || 'OK'}</td>
-        <td>${r.hora || '-'}</td>
-      </tr>`
-  })
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const PW = 210  // ancho A4
+  const M = 15    // margen
 
-  const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Informe Turno - ${fechaHoyFormato.value}</title>
-<style>
-  body { font-family: Arial, sans-serif; margin: 20px; color: #1a202c; }
-  h1 { color: #1a365d; font-size: 22px; margin-bottom: 4px; }
-  .info { background: #edf2f7; padding: 14px 18px; border-radius: 8px; margin-bottom: 20px; }
-  .info p { margin: 4px 0; font-size: 14px; }
-  .info strong { color: #1a365d; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { background: #1a365d; color: white; padding: 10px 8px; text-align: left; }
-  td { padding: 8px; border-bottom: 1px solid #e2e8f0; }
-  tr:nth-child(even) { background: #f7fafc; }
-  .total { margin-top: 16px; font-size: 15px; font-weight: bold; color: #1a365d; }
-  @media print { body { margin: 0; } }
-</style>
-</head>
-<body>
-  <h1>INFORME DE TURNO - CONTROL ETIQUETADO IV GAMA</h1>
-  <div class="info">
-    <p><strong>Fecha:</strong> ${fechaHoyFormato.value}</p>
-    <p><strong>Responsable:</strong> ${responsableTurno.value}</p>
-    <p><strong>Hora inicio:</strong> ${turnoInicioHora.value}</p>
-    <p><strong>Hora fin:</strong> ${horaFin}</p>
-  </div>
-  <table>
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Cliente</th>
-        <th>Producto</th>
-        <th>EAN</th>
-        <th>Lote</th>
-        <th>F. Envasado</th>
-        <th>F. Caducidad</th>
-        <th>P+X</th>
-        <th>Estado</th>
-        <th>Hora</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${filasHTML || '<tr><td colspan="10" style="text-align:center;color:#a0aec0;">No se registraron etiquetas en este turno</td></tr>'}
-    </tbody>
-  </table>
-  <p class="total">Total etiquetas registradas: ${registros.length}</p>
-</body>
-</html>`
+  // ── Portada ──────────────────────────────────────────────
+  doc.setFillColor(26, 54, 93)
+  doc.rect(0, 0, PW, 40, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFontSize(16)
+  doc.setFont('helvetica', 'bold')
+  doc.text('CONTROL ETIQUETADO IV GAMA', PW / 2, 18, { align: 'center' })
+  doc.setFontSize(12)
+  doc.setFont('helvetica', 'normal')
+  doc.text('Informe de turno', PW / 2, 28, { align: 'center' })
 
-  const blob = new Blob([html], { type: 'text/html' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `informe_turno_${fechaHoyFormato.value.replace(/\//g, '-')}_${responsableTurno.value}.html`
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  doc.setTextColor(30, 30, 30)
+  doc.setFontSize(12)
+  doc.setFont('helvetica', 'bold')
+  let y = 55
+  const lineH = 8
+  doc.text('Fecha:', M, y);        doc.setFont('helvetica', 'normal'); doc.text(fecha, M + 35, y); y += lineH
+  doc.setFont('helvetica', 'bold')
+  doc.text('Responsable:', M, y);  doc.setFont('helvetica', 'normal'); doc.text(responsable, M + 35, y); y += lineH
+  doc.setFont('helvetica', 'bold')
+  doc.text('Hora inicio:', M, y);  doc.setFont('helvetica', 'normal'); doc.text(turnoInicioHora.value, M + 35, y); y += lineH
+  doc.setFont('helvetica', 'bold')
+  doc.text('Hora fin:', M, y);     doc.setFont('helvetica', 'normal'); doc.text(horaFin, M + 35, y); y += lineH
+  doc.setFont('helvetica', 'bold')
+  doc.text('Total etiquetas:', M, y); doc.setFont('helvetica', 'normal'); doc.text(String(registros.length), M + 35, y)
+
+  // ── Una página por etiqueta ───────────────────────────────
+  for (const [i, r] of registros.entries()) {
+    doc.addPage()
+
+    // Cabecera azul
+    doc.setFillColor(26, 54, 93)
+    doc.rect(0, 0, PW, 28, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    const titulo = r.producto || 'Sin nombre'
+    doc.text(titulo, PW / 2, 12, { align: 'center', maxWidth: PW - 2 * M })
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Etiqueta ${i + 1} de ${registros.length}  ·  ${r.cliente || '-'}  ·  ${r.hora || '-'}`, PW / 2, 22, { align: 'center' })
+
+    // Imagen
+    if (r.imagen) {
+      const imgW = 120
+      const imgH = 85
+      const imgX = (PW - imgW) / 2
+      const imgFormat = r.imagen.startsWith('data:image/png') ? 'PNG' : 'JPEG'
+      doc.addImage(r.imagen, imgFormat, imgX, 33, imgW, imgH)
+    }
+
+    // Línea separadora
+    const tabY = 125
+    doc.setDrawColor(200, 200, 200)
+    doc.line(M, tabY - 3, PW - M, tabY - 3)
+
+    // Tabla de datos (2 columnas: etiqueta | valor)
+    const campos = [
+      ['Cliente',        r.cliente        || '-'],
+      ['EAN',            r.ean            || '-'],
+      ['Lote',           r.lote           || '-'],
+      ['Fecha envasado', r.fecha_envasado || '-'],
+      ['Fecha caducidad',r.fecha_caducidad|| '-'],
+      ['P+X',            r.px             || '-'],
+      ['Estado',         r.estado         || 'OK'],
+    ]
+
+    doc.setFontSize(10)
+    let ty = tabY
+    campos.forEach(([label, val], idx) => {
+      const bg = idx % 2 === 0 ? [237, 242, 247] : [255, 255, 255]
+      doc.setFillColor(...bg)
+      doc.rect(M, ty, PW - 2 * M, 9, 'F')
+      doc.setTextColor(26, 54, 93)
+      doc.setFont('helvetica', 'bold')
+      doc.text(label, M + 2, ty + 6.5)
+      doc.setTextColor(30, 30, 30)
+      doc.setFont('helvetica', 'normal')
+      doc.text(String(val), M + 55, ty + 6.5)
+      ty += 9
+    })
+
+    // Estado con color
+    const estadoColor = (r.estado || 'OK').toUpperCase().includes('NOK') || (r.estado || '').toUpperCase().includes('ERROR')
+      ? [197, 48, 48]
+      : [39, 103, 73]
+    doc.setFillColor(...estadoColor)
+    doc.roundedRect(M, ty + 4, 40, 10, 2, 2, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.text((r.estado || 'OK').toUpperCase(), M + 20, ty + 10.5, { align: 'center' })
+  }
+
+  // Descargar
+  const nombreFichero = `informe_turno_${fecha.replace(/\//g, '-')}_${responsable}.pdf`
+  doc.save(nombreFichero)
 }
 
 // --- RESET ---
