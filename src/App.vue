@@ -295,6 +295,7 @@ import { supabase } from './supabase.js'
 import { jsPDF } from 'jspdf'
 
 const webhookUrl = 'https://surexportlevante.app.n8n.cloud/webhook/4efe3070-e61a-4d03-9eef-052ed5508cab'
+const webhookInformeTurnoUrl = 'https://surexportlevante.app.n8n.cloud/webhook/4619c8e5-156d-464b-ab5b-a8a92bc09a01'
 
 // --- MODO REAL ACTIVADO ---
 const isSimulationMode = ref(false)
@@ -927,6 +928,17 @@ const generarInformeTurno = async () => {
   // Descargar
   const nombreFichero = `informe_turno_${fecha.replace(/\//g, '-')}_${responsable}.pdf`
   doc.save(nombreFichero)
+
+  // Enviar a n8n por email
+  const pdfBlob = doc.output('blob')
+  const fd = new FormData()
+  fd.append('pdf', pdfBlob, nombreFichero)
+  fd.append('fecha', fecha)
+  fd.append('responsable', responsable)
+  fd.append('total', String(registros.length))
+  fd.append('hora_inicio', turnoInicioHora.value)
+  fd.append('hora_fin', horaFin)
+  await fetch(webhookInformeTurnoUrl, { method: 'POST', body: fd })
 }
 
 // --- RESET ---
