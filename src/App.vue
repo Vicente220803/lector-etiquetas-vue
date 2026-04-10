@@ -784,13 +784,19 @@ const guardarRegistro = async () => {
 }
 
 // --- HELPERS ---
-const blobUrlToBase64 = async (url) => {
-  const r = await fetch(url)
-  const blob = await r.blob()
+const blobUrlToBase64 = (url) => {
   return new Promise(resolve => {
-    const reader = new FileReader()
-    reader.onloadend = () => resolve(reader.result)
-    reader.readAsDataURL(blob)
+    const img = new Image()
+    img.onload = () => {
+      const maxW = 800
+      const scale = img.width > maxW ? maxW / img.width : 1
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width * scale
+      canvas.height = img.height * scale
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+      resolve(canvas.toDataURL('image/jpeg', 0.7))
+    }
+    img.src = url
   })
 }
 
