@@ -17,6 +17,7 @@
       </div>
     </div>
     <div class="camera-controls">
+      <p class="camera-tip">Acerca la etiqueta al marco y espera que enfoque</p>
       <button @click="captureImage" class="capture-button">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
@@ -43,12 +44,33 @@ let stream = null
 const startCamera = async () => {
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' }
+      video: {
+        facingMode: 'environment',
+        width: { ideal: 3840, min: 1280 },
+        height: { ideal: 2160, min: 720 },
+        focusMode: 'continuous',
+        advanced: [{ focusMode: 'continuous' }]
+      }
     })
     video.value.srcObject = stream
+
+    // Aplicar enfoque continuo si el dispositivo lo soporta
+    const track = stream.getVideoTracks()[0]
+    const capabilities = track.getCapabilities?.()
+    if (capabilities?.focusMode?.includes('continuous')) {
+      await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
+    }
   } catch (error) {
-    console.error('Error al acceder a la cámara:', error)
-    alert('No se pudo acceder a la cámara. Asegúrate de dar los permisos necesarios.')
+    // Fallback a configuración básica si falla la alta resolución
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      })
+      video.value.srcObject = stream
+    } catch (err) {
+      console.error('Error al acceder a la cámara:', err)
+      alert('No se pudo acceder a la cámara. Asegúrate de dar los permisos necesarios.')
+    }
   }
 }
 
@@ -68,7 +90,20 @@ const captureImage = () => {
   const canvas = document.createElement('canvas')
   canvas.width = video.value.videoWidth
   canvas.height = video.value.videoHeight
-  canvas.getContext('2d').drawImage(video.value, 0, 0, canvas.width, canvas.height)
+  const ctx = canvas.getContext('2d')
+
+  // Dibujar frame del video
+  ctx.drawImage(video.value, 0, 0, canvas.width, canvas.height)
+
+  // Mejorar nitidez y contraste para OCR
+  ctx.filter = 'contrast(1.2) saturate(1.1) brightness(1.05)'
+  ctx.drawImage(canvas, 0, 0)
+  ctx.filter = 'none'
+
+  // Aplicar unsharp mask para nitidez
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const sharpened = applySharpen(imageData)
+  ctx.putImageData(sharpened, 0, 0)
 
   // Usar Promise para esperar a que toBlob termine
   canvas.toBlob(
@@ -83,8 +118,36 @@ const captureImage = () => {
       stopCamera()
     },
     'image/jpeg',
-    0.95
+    0.97
   )
+}
+
+// Kernel de nitidez (unsharp mask) para mejorar legibilidad OCR
+const applySharpen = (imageData) => {
+  const d = imageData.data
+  const w = imageData.width
+  const h = imageData.height
+  const result = new ImageData(w, h)
+  const rd = result.data
+  // Kernel: 0 -1 0 / -1 5 -1 / 0 -1 0
+  const kernel = [0, -1, 0, -1, 5, -1, 0, -1, 0]
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const idx = (y * w + x) * 4
+      for (let c = 0; c < 3; c++) {
+        let sum = 0
+        for (let ky = -1; ky <= 1; ky++) {
+          for (let kx = -1; kx <= 1; kx++) {
+            const ni = ((y + ky) * w + (x + kx)) * 4
+            sum += d[ni + c] * kernel[(ky + 1) * 3 + (kx + 1)]
+          }
+        }
+        rd[idx + c] = Math.min(255, Math.max(0, sum))
+      }
+      rd[idx + 3] = d[idx + 3]
+    }
+  }
+  return result
 }
 
 onMounted(() => {
@@ -201,6 +264,13 @@ video {
   padding: 16px 20px;
   background-color: rgba(0, 0, 0, 0.85);
   flex-shrink: 0;
+}
+
+.camera-tip {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  text-align: center;
+  margin: 0 0 10px;
 }
 
 .capture-button {
