@@ -740,11 +740,17 @@ const guardarRegistro = async () => {
     registrosTurno.value.push({
       cliente: formData.value.cliente,
       producto: producto.value || formData.value.producto_db,
+      origen: formData.value.origen,
       ean: formData.value.ean,
       lote: formData.value.lote,
+      codigo_r: formData.value.codigo_r,
       fecha_envasado: formData.value.fecha_envasado,
       fecha_caducidad: formData.value.fecha_caducidad,
+      precio_kg: formData.value.precio_kg,
+      peso_neto: formData.value.peso_neto,
+      importe: formData.value.importe,
       px: px_usuario.value,
+      responsable: responsable.value,
       estado: estadoGeneral.value,
       hora: horaRegistro,
       imagen: imagenBase64
@@ -877,13 +883,18 @@ const generarInformeTurno = async () => {
 
     // Tabla de datos (2 columnas: etiqueta | valor)
     const campos = [
-      ['Cliente',        r.cliente        || '-'],
-      ['EAN',            r.ean            || '-'],
-      ['Lote',           r.lote           || '-'],
-      ['Fecha envasado', r.fecha_envasado || '-'],
-      ['Fecha caducidad',r.fecha_caducidad|| '-'],
-      ['P+X',            r.px             || '-'],
-      ['Estado',         r.estado         || 'OK'],
+      ['Cliente',         r.cliente         || '-'],
+      ['Origen',          r.origen          || '-'],
+      ['EAN',             r.ean             || '-'],
+      ['Lote',            r.lote            || '-'],
+      ['Código R',        r.codigo_r        || '-'],
+      ['Fecha envasado',  r.fecha_envasado  || '-'],
+      ['Fecha caducidad', r.fecha_caducidad || '-'],
+      ['Precio/kg',       r.precio_kg       || '-'],
+      ['Peso neto',       r.peso_neto       || '-'],
+      ['Importe',         r.importe         || '-'],
+      ['P+X',             r.px              || '-'],
+      ['Responsable',     r.responsable     || '-'],
     ]
 
     doc.setFontSize(10)
