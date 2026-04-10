@@ -898,6 +898,7 @@ const resetApp = () => {
   eanEscaneado.value = ''
   producto.value = ''
   datosExtraidos.value = false
+  responsable.value = responsableTurno.value
 
   if (imageCache.size > 10) imageCache.clear()
 }
