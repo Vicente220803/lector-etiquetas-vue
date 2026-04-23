@@ -391,7 +391,8 @@ const pxRangos = {
     'Maskom':       { min: 8, max: 9 }
   },
   'coco': {
-    'DELMONTE':     { min: 7, max: 10 }
+    'DELMONTE':     { min: 7, max: 10 },
+    'ALDI':         { min: 9, max: 10 }
   }
 }
 
