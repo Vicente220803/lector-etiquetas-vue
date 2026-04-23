@@ -103,12 +103,15 @@
         </div>
 
         <!-- Image slot 1: captured photo -->
-        <div class="image-slot" @click="toggleCamera" tabindex="0" @keydown.enter="toggleCamera">
-          <img v-if="previewImageUrl" :src="previewImageUrl" alt="Foto etiqueta" class="image-thumb">
-          <div v-else class="image-placeholder">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="#9ca3af" stroke-width="1.5"/><circle cx="12" cy="13" r="4" stroke="#9ca3af" stroke-width="1.5"/></svg>
-            <span>Pulsar para agregar una imagen</span>
+        <div class="image-slot-wrapper">
+          <div class="image-slot" @click="toggleCamera" tabindex="0" @keydown.enter="toggleCamera">
+            <img v-if="previewImageUrl" :src="previewImageUrl" alt="Foto etiqueta" class="image-thumb">
+            <div v-else class="image-placeholder">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="#9ca3af" stroke-width="1.5"/><circle cx="12" cy="13" r="4" stroke="#9ca3af" stroke-width="1.5"/></svg>
+              <span>Pulsar para agregar una imagen</span>
+            </div>
           </div>
+          <button class="btn-galeria" @click="fileInput.click()" type="button">📁 Galería</button>
         </div>
 
       </div>
@@ -378,21 +381,37 @@ const eanCoincide = computed(() => {
   return formData.value.ean.trim() === eanEscaneado.value.trim()
 })
 
-// P+X validation ranges
-const pxRangosPorCliente = {
-  'LIDL': { min: 8, max: 9 },
-  'ALDI': { min: 8, max: 9 },
-  'DELMONTE': { min: 8, max: 9 },
-  'MERCADONA SA': { min: 5, max: 5 },
-  'Maskom': { min: 8, max: 9 }
+// P+X validation ranges por tipo de producto y cliente
+const pxRangos = {
+  'piña': {
+    'LIDL':         { min: 8, max: 9 },
+    'ALDI':         { min: 8, max: 9 },
+    'DELMONTE':     { min: 8, max: 9 },
+    'MERCADONA SA': { min: 5, max: 5 },
+    'Maskom':       { min: 8, max: 9 }
+  },
+  'coco': {
+    'DELMONTE':     { min: 7, max: 10 }
+  }
+}
+
+// Detecta el tipo de producto desde producto_db devuelto por n8n
+const tipoProducto = computed(() => {
+  const p = (producto.value || formData.value.producto_db || '').toLowerCase()
+  if (p.includes('coco')) return 'coco'
+  return 'piña'
+})
+
+const getRangoActual = () => {
+  const cliente = formData.value.cliente
+  return pxRangos[tipoProducto.value]?.[cliente] ?? null
 }
 
 const esPxCorrecto = computed(() => {
   if (!validacionPx.value) return px_usuario.value !== null && px_usuario.value !== ''
   const pxValue = Number(px_usuario.value)
   const pxLeido = Number(validacionPx.value.px_leido)
-  const cliente = formData.value.cliente
-  const rango = pxRangosPorCliente[cliente]
+  const rango = getRangoActual()
 
   if (pxValue !== pxLeido) return false
   if (!rango) return true
@@ -579,7 +598,7 @@ watch(px_usuario, (val) => {
   const pxValue = Number(val)
   const pxLeido = Number(validacionPx.value.px_leido)
   const cliente = formData.value.cliente
-  const rango = pxRangosPorCliente[cliente]
+  const rango = getRangoActual()
 
   if (pxValue !== pxLeido) {
     pxAlertTitle.value = '❌ P+X NO COINCIDE'
@@ -1316,6 +1335,26 @@ const showError = (message) => {
 }
 
 /* ========== IMAGE SLOTS ========== */
+.image-slot-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.btn-galeria {
+  background: white;
+  border: 2px solid #1a365d;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1a365d;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.2s;
+}
+.btn-galeria:hover { background: #edf2f7; }
+
 .image-slot {
   border: 2px solid #1a365d;
   border-radius: 8px;
