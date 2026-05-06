@@ -14,20 +14,44 @@
           <p v-else class="verify-subtitle">📸 Haz la foto de la etiqueta</p>
         </template>
 
-        <!-- Estado 2: verificación OK -->
-        <template v-else-if="verifyResult.ok">
+        <!-- Estado 2: OCR OK, falta escanear EAN -->
+        <template v-else-if="verifyResult.ok && eanCoincide !== true">
           <div class="verify-icon verify-icon-ok">
             <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#38a169" stroke-width="2"/><path d="M8 12l3 3 5-6" stroke="#38a169" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <h2 class="verify-title verify-title-ok">¡COINCIDE!</h2>
-          <p class="verify-subtitle">Los datos de la etiqueta son correctos</p>
+          <p class="verify-subtitle">Datos correctos. Escanea el código de barras para confirmar.</p>
           <div class="verify-info verify-info-ok">
             <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
             <div><b>Producto:</b> {{ verifyResult.datos.producto_db }}</div>
             <div><b>EAN:</b> {{ verifyResult.datos.ean }}</div>
             <div><b>P+X:</b> {{ verifyResult.datos.validacion_px?.px_leido }}</div>
           </div>
-          <p class="verify-hint">📲 Próximo paso: escanear código de barras (siguiente fase)</p>
+          <input
+            ref="eanInputRef"
+            v-model="eanEscaneado"
+            type="text"
+            placeholder="Escanea EAN aquí..."
+            class="ean-scan-input"
+            autofocus
+          />
+          <p v-if="eanEscaneado && eanCoincide === false" class="verify-error-msg">⚠️ EAN no coincide. Vuelve a escanear.</p>
+          <p v-else class="verify-hint">📲 Pasa el lector sobre el código de barras</p>
+        </template>
+
+        <!-- Estado 3: OCR + EAN ambos OK → VERIFICADO -->
+        <template v-else-if="verifyResult.ok && eanCoincide === true">
+          <div class="verify-icon verify-icon-ok">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#38a169" stroke="#38a169" stroke-width="2"/><path d="M8 12l3 3 5-6" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h2 class="verify-title verify-title-ok">✅ VERIFICADO</h2>
+          <p class="verify-subtitle">Etiqueta validada correctamente</p>
+          <div class="verify-info verify-info-ok">
+            <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
+            <div><b>EAN:</b> {{ verifyResult.datos.ean }}</div>
+            <div><b>P+X:</b> {{ verifyResult.datos.validacion_px?.px_leido }}</div>
+          </div>
+          <p class="verify-hint">{{ resultadoEnviado ? '✓ Resultado guardado y notificado' : '⏳ Enviando resultado...' }}</p>
         </template>
 
         <!-- Estado 3: verificación KO -->
@@ -406,6 +430,7 @@ const verifyParams = (() => {
 })()
 const verifyMode = ref(verifyParams !== null)
 const verifyResult = ref(null) // null | { ok: true, datos } | { ok: false, errores: [...] }
+const eanInputRef = ref(null)
 
 if (verifyParams) {
   console.log('[VERIFY MODE] Parámetros recibidos:', verifyParams)
@@ -427,8 +452,97 @@ const reintentarVerificacion = () => {
   verifyResult.value = null
   validacionPx.value = null
   datosExtraidos.value = false
+  eanEscaneado.value = ''
+  resultadoEnviado.value = false
   showCamera.value = true
 }
+
+// En modo verificación, auto-enfocar el input del EAN cuando se llega al estado OK
+watch(verifyResult, (val) => {
+  if (verifyMode.value && val?.ok) {
+    setTimeout(() => {
+      eanInputRef.value?.focus()
+    }, 300)
+  }
+})
+
+// Estado del envío del resultado al padre (para evitar duplicados)
+const resultadoEnviado = ref(false)
+
+// Envía el resultado completo (Supabase + email + postMessage al padre)
+const enviarResultadoVerificacion = async () => {
+  if (resultadoEnviado.value) return
+  if (!verifyMode.value || !verifyResult.value?.ok || eanCoincide.value !== true) return
+  resultadoEnviado.value = true
+
+  const datos = verifyResult.value.datos
+  const timestamp = new Date().toISOString()
+  const horaActual = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+
+  const payload = {
+    cliente: datos.cliente,
+    producto_db: datos.producto_db,
+    origen: datos.origen,
+    ean: datos.ean,
+    lote: datos.lote,
+    fecha_envasado: datos.fecha_envasado,
+    fecha_caducidad: datos.fecha_caducidad,
+    peso_neto: datos.peso_neto,
+    px_usuario: String(datos.validacion_px?.px_leido || ''),
+    responsable: 'Verificación automática (Hoja de Fabricación)',
+    hora_guardado: horaActual,
+    order_id: verifyParams.orderId
+  }
+
+  // 1. Guardar en Supabase audit_logs
+  try {
+    await supabase.from('audit_logs').insert([{
+      timestamp,
+      cliente: datos.cliente,
+      ean: datos.ean,
+      px_usuario: payload.px_usuario,
+      estado: 'VERIFICADA',
+      detalles: payload,
+      navegador: navigator.userAgent.substring(0, 100)
+    }])
+  } catch (e) {
+    console.warn('[VERIFY] Error guardando en audit_logs:', e)
+  }
+
+  // 2. Enviar email instantáneo (no bloqueante)
+  try {
+    await fetch(webhookEmailEtiquetaUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+  } catch (e) {
+    console.warn('[VERIFY] Error enviando email:', e)
+  }
+
+  // 3. postMessage al padre (Hoja de Fabricación) para que marque la fila en verde
+  const mensaje = {
+    source: 'lector-etiquetas',
+    type: 'verification-complete',
+    orderId: verifyParams.orderId,
+    result: 'ok',
+    data: payload,
+    timestamp
+  }
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage(mensaje, '*')
+    console.log('[VERIFY] Resultado enviado al padre:', mensaje)
+  } else {
+    console.log('[VERIFY] No hay app padre (estás abriendo la URL directa). Mensaje que se enviaría:', mensaje)
+  }
+}
+
+// Cuando EAN coincide en modo verificación, disparar el envío del resultado
+watch(eanCoincide, (val) => {
+  if (verifyMode.value && val === true && verifyResult.value?.ok) {
+    enviarResultadoVerificacion()
+  }
+})
 
 // --- TURNO STATE ---
 const turnoActivo = ref(false)
@@ -1249,6 +1363,38 @@ const showError = (message) => {
 .btn-reintentar:hover {
   background: linear-gradient(135deg, #3182ce, #2c5282);
   transform: translateY(-1px);
+}
+
+/* Input de escaneo EAN en modo verificación */
+.ean-scan-input {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-weight: 600;
+  border: 2px solid #38a169;
+  border-radius: 8px;
+  background: #f0fff4;
+  color: #1a365d;
+  margin-top: 16px;
+  text-align: center;
+  letter-spacing: 1px;
+  outline: none;
+  animation: pulseGreen 1.5s infinite;
+}
+.ean-scan-input:focus {
+  border-color: #2f855a;
+  background: white;
+  animation: none;
+}
+.verify-error-msg {
+  margin-top: 12px;
+  color: #c53030;
+  font-size: 14px;
+  font-weight: 600;
+}
+@keyframes pulseGreen {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(56, 161, 105, 0.4); }
+  50%      { box-shadow: 0 0 0 6px rgba(56, 161, 105, 0); }
 }
 @keyframes pop {
   0%   { transform: scale(0.5); opacity: 0; }

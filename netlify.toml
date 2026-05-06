@@ -1,0 +1,38 @@
+# Configuración Netlify para la app del lector de etiquetas
+# Habilita que la app sea embebida como iframe en la Hoja de Fabricación
+# y que la cámara funcione dentro de ese iframe.
+
+[build]
+  publish = "dist"
+  command = "npm run build"
+
+# Headers HTTP aplicados a todas las rutas
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # ─────────────────────────────────────────────────────────────────
+    # Permite que la app sea embebida en un iframe.
+    # Por defecto allow https:// → cualquier origen HTTPS puede embebernos.
+    # CUANDO SEPAS EL DOMINIO EXACTO de la Hoja de Fabricación, restringe
+    # cambiando "https:" por la URL específica.
+    #
+    # Ejemplo restringido:
+    # Content-Security-Policy = "frame-ancestors 'self' https://hoja-fabricacion.surexport.es;"
+    # ─────────────────────────────────────────────────────────────────
+    Content-Security-Policy = "frame-ancestors 'self' https:;"
+
+    # ─────────────────────────────────────────────────────────────────
+    # Permite usar la cámara y micrófono dentro de iframes cross-origin
+    # cuando el iframe padre tiene allow="camera; microphone".
+    # ─────────────────────────────────────────────────────────────────
+    Permissions-Policy = "camera=*, microphone=*"
+
+    # Headers de seguridad estándar
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# SPA fallback: cualquier ruta cae a index.html (necesario para Vue Router si lo añadís en el futuro)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
