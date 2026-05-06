@@ -46,8 +46,8 @@ const startCamera = async () => {
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: 'environment',
-        width: { ideal: 3840, min: 1280 },
-        height: { ideal: 2160, min: 720 },
+        width: { ideal: 1920, min: 1280 },
+        height: { ideal: 1080, min: 720 },
         focusMode: 'continuous',
         advanced: [{ focusMode: 'continuous' }]
       }
@@ -87,25 +87,21 @@ const captureImage = () => {
     return
   }
 
+  // Capturar a resolución reducida si la cámara da algo enorme (max 1600 ancho)
+  const srcW = video.value.videoWidth
+  const srcH = video.value.videoHeight
+  const maxW = 1600
+  const scale = srcW > maxW ? maxW / srcW : 1
   const canvas = document.createElement('canvas')
-  canvas.width = video.value.videoWidth
-  canvas.height = video.value.videoHeight
+  canvas.width = Math.round(srcW * scale)
+  canvas.height = Math.round(srcH * scale)
   const ctx = canvas.getContext('2d')
 
-  // Dibujar frame del video
-  ctx.drawImage(video.value, 0, 0, canvas.width, canvas.height)
-
-  // Mejorar nitidez y contraste para OCR
+  // Dibujar frame del video con filtro CSS (rápido, hardware acelerado)
   ctx.filter = 'contrast(1.2) saturate(1.1) brightness(1.05)'
-  ctx.drawImage(canvas, 0, 0)
+  ctx.drawImage(video.value, 0, 0, canvas.width, canvas.height)
   ctx.filter = 'none'
 
-  // Aplicar unsharp mask para nitidez
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  const sharpened = applySharpen(imageData)
-  ctx.putImageData(sharpened, 0, 0)
-
-  // Usar Promise para esperar a que toBlob termine
   canvas.toBlob(
     blob => {
       if (!blob) {
@@ -118,36 +114,8 @@ const captureImage = () => {
       stopCamera()
     },
     'image/jpeg',
-    0.97
+    0.85
   )
-}
-
-// Kernel de nitidez (unsharp mask) para mejorar legibilidad OCR
-const applySharpen = (imageData) => {
-  const d = imageData.data
-  const w = imageData.width
-  const h = imageData.height
-  const result = new ImageData(w, h)
-  const rd = result.data
-  // Kernel: 0 -1 0 / -1 5 -1 / 0 -1 0
-  const kernel = [0, -1, 0, -1, 5, -1, 0, -1, 0]
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const idx = (y * w + x) * 4
-      for (let c = 0; c < 3; c++) {
-        let sum = 0
-        for (let ky = -1; ky <= 1; ky++) {
-          for (let kx = -1; kx <= 1; kx++) {
-            const ni = ((y + ky) * w + (x + kx)) * 4
-            sum += d[ni + c] * kernel[(ky + 1) * 3 + (kx + 1)]
-          }
-        }
-        rd[idx + c] = Math.min(255, Math.max(0, sum))
-      }
-      rd[idx + 3] = d[idx + 3]
-    }
-  }
-  return result
 }
 
 onMounted(() => {
