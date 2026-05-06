@@ -10,15 +10,8 @@
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" stroke="#1a365d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <h2 class="verify-title">VERIFICAR ETIQUETA</h2>
-          <p class="verify-subtitle">{{ isProcessing ? 'Analizando etiqueta...' : 'Modo verificación activado' }}</p>
-          <div class="verify-info">
-            <div><b>Cliente esperado:</b> {{ verifyParams?.cliente || '—' }}</div>
-            <div><b>P+X esperado:</b> {{ verifyParams?.px ?? '—' }}</div>
-            <div><b>Producto:</b> {{ verifyParams?.modoProducto === 'coco' ? '🥥 Coco' : '🍍 Piña' }}</div>
-            <div><b>ID Orden:</b> {{ verifyParams?.orderId || '—' }}</div>
-          </div>
-          <p v-if="isProcessing" class="verify-hint">⏳ Procesando imagen, espera...</p>
-          <p v-else class="verify-hint">📸 Haz la foto de la etiqueta</p>
+          <p v-if="isProcessing" class="verify-subtitle">⏳ Analizando etiqueta, espera unos segundos...</p>
+          <p v-else class="verify-subtitle">📸 Haz la foto de la etiqueta</p>
         </template>
 
         <!-- Estado 2: verificación OK -->
