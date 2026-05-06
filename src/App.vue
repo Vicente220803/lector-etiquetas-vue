@@ -1,5 +1,25 @@
 <template>
   <div class="app">
+    <!-- ============ MODO VERIFICACIÓN (iframe desde Hoja de Fabricación) ============ -->
+    <div v-if="verifyMode" class="verify-screen">
+      <div class="verify-card">
+        <div class="verify-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" stroke="#1a365d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h2 class="verify-title">VERIFICAR ETIQUETA</h2>
+        <p class="verify-subtitle">Modo verificación activado</p>
+        <div class="verify-info">
+          <div><b>Cliente esperado:</b> {{ verifyParams?.cliente || '—' }}</div>
+          <div><b>P+X esperado:</b> {{ verifyParams?.px ?? '—' }}</div>
+          <div><b>Producto:</b> {{ verifyParams?.modoProducto === 'coco' ? '🥥 Coco' : '🍍 Piña' }}</div>
+          <div><b>ID Orden:</b> {{ verifyParams?.orderId || '—' }}</div>
+        </div>
+        <p class="verify-hint">⏳ La cámara se abrirá automáticamente (próximo paso)</p>
+      </div>
+    </div>
+
+    <!-- ============ MODO NORMAL (turno + análisis manual) ============ -->
+    <template v-else>
     <!-- PANTALLA INICIO TURNO (cuando no hay turno activo) -->
     <div v-if="!turnoActivo" class="turno-screen">
       <div class="turno-card">
@@ -37,6 +57,24 @@
       <div class="header-actions">
         <div class="header-date">
           {{ fechaHoyFormato }} ({{ diaJuliano }})
+        </div>
+        <div class="modo-toggle">
+          <button
+            class="modo-btn"
+            :class="{ 'modo-btn-active modo-pina': modoProducto === 'pina' }"
+            @click="modoProducto = 'pina'"
+            type="button"
+          >
+            🍍 PIÑA
+          </button>
+          <button
+            class="modo-btn"
+            :class="{ 'modo-btn-active modo-coco': modoProducto === 'coco' }"
+            @click="modoProducto = 'coco'"
+            type="button"
+          >
+            🥥 COCO
+          </button>
         </div>
         <button class="btn-finalizar-turno-header" @click="showConfirmFinalizar = true">
           FINALIZAR TURNO ({{ registrosTurno.length }})
@@ -134,39 +172,60 @@
         </div>
       </div>
 
-      <div class="form-row row-3col">
-        <div class="field-group">
-          <label class="field-label">EAN</label>
-          <input v-model="formData.ean" type="text" class="field-input field-readonly" readonly placeholder="—">
+      <template v-if="modoProducto !== 'coco'">
+        <div class="form-row row-3col">
+          <div class="field-group">
+            <label class="field-label">EAN</label>
+            <input v-model="formData.ean" type="text" class="field-input field-readonly" readonly placeholder="—">
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">CÓDIGO R</label>
+            <input v-model="formData.codigo_r" type="text" class="field-input field-readonly" readonly placeholder="—">
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">FECHA CADUCIDAD</label>
+            <input v-model="formData.fecha_caducidad" type="text" class="field-input field-readonly" readonly placeholder="—">
+          </div>
         </div>
 
-        <div class="field-group">
-          <label class="field-label">CÓDIGO R</label>
-          <input v-model="formData.codigo_r" type="text" class="field-input field-readonly" readonly placeholder="—">
-        </div>
+        <div class="form-row row-3col">
+          <div class="field-group">
+            <label class="field-label">PRECIO/KG</label>
+            <input v-model="formData.precio_kg" type="text" class="field-input field-readonly" readonly placeholder="—">
+          </div>
 
-        <div class="field-group">
-          <label class="field-label">FECHA CADUCIDAD</label>
-          <input v-model="formData.fecha_caducidad" type="text" class="field-input field-readonly" readonly placeholder="—">
-        </div>
-      </div>
+          <div class="field-group">
+            <label class="field-label">PESO NETO</label>
+            <input v-model="formData.peso_neto" type="text" class="field-input field-readonly" readonly placeholder="—">
+          </div>
 
-      <div class="form-row row-3col">
-        <div class="field-group">
-          <label class="field-label">PRECIO/KG</label>
-          <input v-model="formData.precio_kg" type="text" class="field-input field-readonly" readonly placeholder="—">
+          <div class="field-group">
+            <label class="field-label">IMPORTE</label>
+            <input v-model="formData.importe" type="text" class="field-input field-readonly" readonly placeholder="—">
+          </div>
         </div>
+      </template>
 
-        <div class="field-group">
-          <label class="field-label">PESO NETO</label>
-          <input v-model="formData.peso_neto" type="text" class="field-input field-readonly" readonly placeholder="—">
-        </div>
+      <template v-else>
+        <div class="form-row row-3col">
+          <div class="field-group">
+            <label class="field-label">EAN</label>
+            <input v-model="formData.ean" type="text" class="field-input field-readonly" readonly placeholder="—">
+          </div>
 
-        <div class="field-group">
-          <label class="field-label">IMPORTE</label>
-          <input v-model="formData.importe" type="text" class="field-input field-readonly" readonly placeholder="—">
+          <div class="field-group">
+            <label class="field-label">FECHA CADUCIDAD</label>
+            <input v-model="formData.fecha_caducidad" type="text" class="field-input field-readonly" readonly placeholder="—">
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">PESO NETO</label>
+            <input v-model="formData.peso_neto" type="text" class="field-input field-readonly" readonly placeholder="—">
+          </div>
         </div>
-      </div>
+      </template>
 
 
       <!-- Hidden file input -->
@@ -218,15 +277,6 @@
     </div>
 
     <!-- MODALS -->
-    <!-- Camera modal -->
-    <div v-if="showCamera" class="camera-modal">
-      <Camera
-        :show-camera="showCamera"
-        @image-captured="handleImageCaptured"
-        @close-camera="closeCamera"
-      />
-    </div>
-
     <!-- Image zoom -->
     <div v-if="showImagePreview" class="modal-overlay" @click="showImagePreview = false">
       <div class="zoom-content" @click.stop>
@@ -288,25 +338,66 @@
         </div>
       </div>
     </div>
+    </template><!-- fin v-else verifyMode -->
+
+    <!-- Camera modal (accesible desde modo normal y modo verificación) -->
+    <div v-if="showCamera" class="camera-modal">
+      <Camera
+        :show-camera="showCamera"
+        @image-captured="handleImageCaptured"
+        @close-camera="closeCamera"
+      />
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import Camera from './components/Camera.vue'
 import { supabase } from './supabase.js'
 import { jsPDF } from 'jspdf'
 
-const webhookUrl = 'https://surexportlevante.app.n8n.cloud/webhook/4efe3070-e61a-4d03-9eef-052ed5508cab'
-const webhookInformeTurnoUrl = 'https://surexportlevante.app.n8n.cloud/webhook/4619c8e5-156d-464b-ab5b-a8a92bc09a01'
+const webhookUrl = 'https://surexportlevante.app.n8n.cloud/webhook/65eeb484-7bfd-48fe-b09d-594e2204b6bf'
+const webhookCocoUrl = 'https://surexportlevante.app.n8n.cloud/webhook/842d2503-5f47-41e2-8388-17cbbdbc5a09'
+const webhookInformeTurnoUrl = 'https://surexportlevante.app.n8n.cloud/webhook/6e531e4e-2a41-46d6-ae7e-7a2a6e8bb578'
+const webhookEmailEtiquetaUrl = 'https://surexportlevante.app.n8n.cloud/webhook/2306cff7-de6a-41c0-a05d-b97f12b43eb8'
 
 // --- MODO REAL ACTIVADO ---
 const isSimulationMode = ref(false)
+
+// --- MODO VERIFICACIÓN (para integración con Hoja de Fabricación) ---
+const verifyParams = (() => {
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('mode') !== 'verify') return null
+  return {
+    modoProducto: params.get('modo_producto') || 'pina',
+    cliente: params.get('cliente') || '',
+    px: params.get('px') ? Number(params.get('px')) : null,
+    orderId: params.get('order_id') || ''
+  }
+})()
+const verifyMode = ref(verifyParams !== null)
+
+if (verifyParams) {
+  console.log('[VERIFY MODE] Parámetros recibidos:', verifyParams)
+}
+
+// Si estamos en modo verificación, abrir cámara automáticamente al cargar
+onMounted(() => {
+  if (verifyMode.value) {
+    // Si es coco, activar el modo coco para que use el webhook correcto
+    if (verifyParams.modoProducto === 'coco') {
+      modoProducto.value = 'coco'
+    }
+    showCamera.value = true
+  }
+})
 
 // --- TURNO STATE ---
 const turnoActivo = ref(false)
 const turnoInicioHora = ref('')
 const responsableTurno = ref('')
+const modoProducto = ref('pina')
 const registrosTurno = ref([])
 const showConfirmIniciar = ref(false)
 const showConfirmFinalizar = ref(false)
@@ -396,11 +487,9 @@ const pxRangos = {
   }
 }
 
-// Detecta el tipo de producto desde producto_db devuelto por n8n
+// El tipo de producto viene del toggle (modoProducto), no del nombre del producto
 const tipoProducto = computed(() => {
-  const p = (producto.value || formData.value.producto_db || '').toLowerCase()
-  if (p.includes('coco')) return 'coco'
-  return 'piña'
+  return modoProducto.value === 'coco' ? 'coco' : 'piña'
 })
 
 const getRangoActual = () => {
@@ -548,8 +637,10 @@ const enviarAOCR = async (file) => {
   const formDataSend = new FormData()
   formDataSend.append('file', file)
 
+  const urlOCR = modoProducto.value === 'coco' ? webhookCocoUrl : webhookUrl
+
   try {
-    const response = await fetch(webhookUrl, {
+    const response = await fetch(urlOCR, {
       method: 'POST',
       body: formDataSend,
     })
@@ -645,46 +736,6 @@ function normalizarFecha(fechaStr) {
   return limpia
 }
 
-async function enviarWebhookConReintentos(formDataSend, maxReintentos = 2) {
-  const webhookUrlFinal = 'https://surexportlevante.app.n8n.cloud/webhook/guardar-etiqueta'
-  let ultimoError = null
-
-  for (let intento = 1; intento <= maxReintentos; intento++) {
-    try {
-      const response = await fetch(webhookUrlFinal, {
-        method: 'POST',
-        body: formDataSend
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        ultimoError = `Error ${response.status}: ${errorText}`
-
-        if (response.status === 500) {
-          throw new Error('n8n no pudo analizar la imagen. Comprueba que la etiqueta sea legible y bien orientada.')
-        }
-
-        if (intento < maxReintentos) {
-          await new Promise(resolve => setTimeout(resolve, 2000))
-          continue
-        }
-        throw new Error(ultimoError)
-      }
-
-      const responseData = await response.json()
-      return responseData
-
-    } catch (error) {
-      ultimoError = error.message
-      if (intento < maxReintentos) {
-        await new Promise(resolve => setTimeout(resolve, 2000))
-      }
-    }
-  }
-
-  throw new Error(`Webhook falló después de ${maxReintentos} intentos. ${ultimoError}`)
-}
-
 async function registrarEnAuditoria(data, estado, detalles = null) {
   try {
     const auditLog = {
@@ -719,45 +770,63 @@ const guardarRegistro = async () => {
       throw new Error("No se encontró la imagen para subir. Por favor, selecciona la imagen de nuevo.")
     }
 
-    const fd = new FormData()
-    fd.append('cliente', formData.value.cliente || '')
-    fd.append('producto_db', producto.value || formData.value.producto_db || '')
-    fd.append('origen', formData.value.origen || '')
-    fd.append('ean', formData.value.ean || '')
-    fd.append('lote', formData.value.lote || '')
-    fd.append('codigo_r', formData.value.codigo_r || '')
-    fd.append('fecha_envasado', normalizarFecha(formData.value.fecha_envasado))
-    fd.append('fecha_caducidad', normalizarFecha(formData.value.fecha_caducidad))
-    fd.append('precio_kg', formData.value.precio_kg || '')
-    fd.append('peso_neto', formData.value.peso_neto || '')
-    fd.append('importe', formData.value.importe || '')
-    fd.append('px_usuario', px_usuario.value || '')
-    fd.append('responsable', responsable.value || '')
-    fd.append('file', fileToUpload.value)
-
-    const responseData = await enviarWebhookConReintentos(fd, 2)
-
-    await registrarEnAuditoria({
-      cliente: formData.value.cliente,
-      ean: formData.value.ean,
-      px_usuario: px_usuario.value
-    }, 'GUARDADA', { webhook_exitoso: true })
-
-    // Save as last entry
     const now = new Date()
     const horaRegistro = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 
+    const imagenBase64 = await fileToBase64(fileToUpload.value)
+
+    const datosEtiqueta = {
+      cliente: formData.value.cliente || '',
+      producto_db: producto.value || formData.value.producto_db || '',
+      origen: formData.value.origen || '',
+      ean: formData.value.ean || '',
+      lote: formData.value.lote || '',
+      codigo_r: formData.value.codigo_r || '',
+      fecha_envasado: normalizarFecha(formData.value.fecha_envasado),
+      fecha_caducidad: normalizarFecha(formData.value.fecha_caducidad),
+      precio_kg: formData.value.precio_kg || '',
+      peso_neto: formData.value.peso_neto || '',
+      importe: formData.value.importe || '',
+      px_usuario: px_usuario.value || '',
+      responsable: responsable.value || '',
+      hora_guardado: horaRegistro
+    }
+
+    const { error: dbError } = await supabase
+      .from('audit_logs')
+      .insert([{
+        timestamp: new Date().toISOString(),
+        cliente: datosEtiqueta.cliente,
+        ean: datosEtiqueta.ean,
+        px_usuario: datosEtiqueta.px_usuario,
+        estado: 'GUARDADA',
+        detalles: datosEtiqueta,
+        navegador: navigator.userAgent.substring(0, 100)
+      }])
+
+    if (dbError) {
+      throw new Error(`Error guardando en Supabase: ${dbError.message}`)
+    }
+
+    try {
+      await fetch(webhookEmailEtiquetaUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...datosEtiqueta, foto_base64: imagenBase64 })
+      })
+    } catch (emailError) {
+      console.warn('No se pudo enviar el email instantáneo:', emailError)
+    }
+
     ultimoRegistro.value = {
-      producto: producto.value || formData.value.producto_db,
-      px: px_usuario.value,
-      fecha: formData.value.fecha_envasado,
-      responsable: responsable.value,
-      id: responseData?.id || Math.floor(Math.random() * 9999),
+      producto: datosEtiqueta.producto_db,
+      px: datosEtiqueta.px_usuario,
+      fecha: datosEtiqueta.fecha_envasado,
+      responsable: datosEtiqueta.responsable,
+      id: Math.floor(Math.random() * 9999),
       imagen: previewImageUrl.value
     }
 
-    // Acumular registro en el turno
-    const imagenBase64 = await blobUrlToBase64(previewImageUrl.value)
     registrosTurno.value.push({
       cliente: formData.value.cliente,
       producto: producto.value || formData.value.producto_db,
@@ -788,35 +857,42 @@ const guardarRegistro = async () => {
       px_usuario: px_usuario.value
     }, 'ERROR', {
       mensaje: msg,
-      tipo: msg.includes('n8n') ? 'ERROR_N8N' : 'ERROR_WEBHOOK'
+      tipo: 'ERROR_GUARDADO'
     })
 
-    if (msg.includes('n8n no pudo analizar')) {
-      showError('n8n no pudo procesar la imagen. Comprueba que la etiqueta sea clara y legible.')
-    } else if (msg.includes('después de 2 intentos')) {
-      showError('Error de conexión. Se reintentó 2 veces sin éxito.')
-    } else {
-      showError(msg)
-    }
+    showError(msg)
   } finally {
     isProcessing.value = false
   }
 }
 
 // --- HELPERS ---
-const blobUrlToBase64 = (url) => {
+const fileToBase64 = (file) => {
   return new Promise(resolve => {
-    const img = new Image()
-    img.onload = () => {
-      const maxW = 800
-      const scale = img.width > maxW ? maxW / img.width : 1
-      const canvas = document.createElement('canvas')
-      canvas.width = img.width * scale
-      canvas.height = img.height * scale
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
-      resolve(canvas.toDataURL('image/jpeg', 0.7))
+    if (!file) { resolve(''); return }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const maxW = 800
+        const scale = img.width > maxW ? maxW / img.width : 1
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width * scale
+        canvas.height = img.height * scale
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.7))
+      }
+      img.onerror = () => {
+        console.warn('No se pudo procesar la imagen')
+        resolve('')
+      }
+      img.src = reader.result
     }
-    img.src = url
+    reader.onerror = () => {
+      console.warn('No se pudo leer el archivo')
+      resolve('')
+    }
+    reader.readAsDataURL(file)
   })
 }
 
@@ -1022,6 +1098,57 @@ const showError = (message) => {
   padding: 20px;
 }
 
+/* ========== MODO VERIFICACIÓN (iframe Hoja de Fabricación) ========== */
+.verify-screen {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f0f4f8 0%, #d6e4f0 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.verify-card {
+  background: white;
+  border-radius: 16px;
+  padding: 32px 28px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+.verify-icon { margin-bottom: 12px; }
+.verify-title {
+  font-size: 20px;
+  font-weight: 900;
+  color: #1a365d;
+  margin: 0 0 6px;
+  letter-spacing: 1px;
+}
+.verify-subtitle {
+  font-size: 13px;
+  color: #718096;
+  margin: 0 0 20px;
+}
+.verify-info {
+  background: #f7fafc;
+  border-left: 4px solid #38a169;
+  padding: 14px 16px;
+  margin: 16px 0;
+  text-align: left;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #2d3748;
+}
+.verify-info > div {
+  padding: 4px 0;
+}
+.verify-hint {
+  font-size: 13px;
+  color: #4a5568;
+  margin: 16px 0 0;
+  font-style: italic;
+}
+
 .turno-card {
   background: white;
   border-radius: 20px;
@@ -1117,6 +1244,42 @@ const showError = (message) => {
 .btn-finalizar-turno-header:hover {
   background: linear-gradient(135deg, #c53030, #9b2c2c);
   transform: translateY(-1px);
+}
+
+/* ========== MODO TOGGLE PIÑA / COCO ========== */
+.modo-toggle {
+  display: inline-flex;
+  background: #edf2f7;
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+}
+.modo-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #718096;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.modo-btn:hover:not(.modo-btn-active) {
+  color: #2d3748;
+  background: rgba(255, 255, 255, 0.5);
+}
+.modo-btn-active {
+  color: white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+.modo-btn-active.modo-pina {
+  background: linear-gradient(135deg, #38a169, #2f855a);
+}
+.modo-btn-active.modo-coco {
+  background: linear-gradient(135deg, #8b5e3c, #6b4423);
 }
 
 /* ========== CONFIRM MODALS ========== */
