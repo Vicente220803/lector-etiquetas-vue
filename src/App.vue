@@ -3,18 +3,53 @@
     <!-- ============ MODO VERIFICACIÓN (iframe desde Hoja de Fabricación) ============ -->
     <div v-if="verifyMode" class="verify-screen">
       <div class="verify-card">
-        <div class="verify-icon">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" stroke="#1a365d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        <h2 class="verify-title">VERIFICAR ETIQUETA</h2>
-        <p class="verify-subtitle">Modo verificación activado</p>
-        <div class="verify-info">
-          <div><b>Cliente esperado:</b> {{ verifyParams?.cliente || '—' }}</div>
-          <div><b>P+X esperado:</b> {{ verifyParams?.px ?? '—' }}</div>
-          <div><b>Producto:</b> {{ verifyParams?.modoProducto === 'coco' ? '🥥 Coco' : '🍍 Piña' }}</div>
-          <div><b>ID Orden:</b> {{ verifyParams?.orderId || '—' }}</div>
-        </div>
-        <p class="verify-hint">⏳ La cámara se abrirá automáticamente (próximo paso)</p>
+
+        <!-- Estado 1: esperando foto / procesando OCR -->
+        <template v-if="!verifyResult">
+          <div class="verify-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" stroke="#1a365d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h2 class="verify-title">VERIFICAR ETIQUETA</h2>
+          <p class="verify-subtitle">{{ isProcessing ? 'Analizando etiqueta...' : 'Modo verificación activado' }}</p>
+          <div class="verify-info">
+            <div><b>Cliente esperado:</b> {{ verifyParams?.cliente || '—' }}</div>
+            <div><b>P+X esperado:</b> {{ verifyParams?.px ?? '—' }}</div>
+            <div><b>Producto:</b> {{ verifyParams?.modoProducto === 'coco' ? '🥥 Coco' : '🍍 Piña' }}</div>
+            <div><b>ID Orden:</b> {{ verifyParams?.orderId || '—' }}</div>
+          </div>
+          <p v-if="isProcessing" class="verify-hint">⏳ Procesando imagen, espera...</p>
+          <p v-else class="verify-hint">📸 Haz la foto de la etiqueta</p>
+        </template>
+
+        <!-- Estado 2: verificación OK -->
+        <template v-else-if="verifyResult.ok">
+          <div class="verify-icon verify-icon-ok">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#38a169" stroke-width="2"/><path d="M8 12l3 3 5-6" stroke="#38a169" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h2 class="verify-title verify-title-ok">¡COINCIDE!</h2>
+          <p class="verify-subtitle">Los datos de la etiqueta son correctos</p>
+          <div class="verify-info verify-info-ok">
+            <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
+            <div><b>Producto:</b> {{ verifyResult.datos.producto_db }}</div>
+            <div><b>EAN:</b> {{ verifyResult.datos.ean }}</div>
+            <div><b>P+X:</b> {{ verifyResult.datos.validacion_px?.px_leido }}</div>
+          </div>
+          <p class="verify-hint">📲 Próximo paso: escanear código de barras (siguiente fase)</p>
+        </template>
+
+        <!-- Estado 3: verificación KO -->
+        <template v-else>
+          <div class="verify-icon verify-icon-ko">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#e53e3e" stroke-width="2"/><path d="M9 9l6 6M15 9l-6 6" stroke="#e53e3e" stroke-width="2.5" stroke-linecap="round"/></svg>
+          </div>
+          <h2 class="verify-title verify-title-ko">NO COINCIDE</h2>
+          <p class="verify-subtitle">La etiqueta no corresponde a la orden</p>
+          <div class="verify-info verify-info-ko">
+            <div v-for="(err, i) in verifyResult.errores" :key="i" class="verify-error">⚠️ {{ err }}</div>
+          </div>
+          <button @click="reintentarVerificacion" class="btn-reintentar">↻ Reintentar foto</button>
+        </template>
+
       </div>
     </div>
 
@@ -377,6 +412,7 @@ const verifyParams = (() => {
   }
 })()
 const verifyMode = ref(verifyParams !== null)
+const verifyResult = ref(null) // null | { ok: true, datos } | { ok: false, errores: [...] }
 
 if (verifyParams) {
   console.log('[VERIFY MODE] Parámetros recibidos:', verifyParams)
@@ -392,6 +428,14 @@ onMounted(() => {
     showCamera.value = true
   }
 })
+
+// Reintentar verificación (limpia resultado y vuelve a abrir cámara)
+const reintentarVerificacion = () => {
+  verifyResult.value = null
+  validacionPx.value = null
+  datosExtraidos.value = false
+  showCamera.value = true
+}
 
 // --- TURNO STATE ---
 const turnoActivo = ref(false)
@@ -682,6 +726,35 @@ const aplicarDatosOCR = (data) => {
   }
 
   datosExtraidos.value = true
+
+  // === MODO VERIFICACIÓN: comparar contra los parámetros de la orden ===
+  if (verifyMode.value && verifyParams) {
+    const errores = []
+
+    // ¿La IA falló completamente?
+    if (data.bloqueo_ia || data.cliente === 'REINTENTAR') {
+      errores.push('La IA no pudo procesar la imagen. Vuelve a hacer la foto.')
+    } else {
+      // Comparar cliente
+      if ((data.cliente || '').toUpperCase() !== verifyParams.cliente.toUpperCase()) {
+        errores.push(`Cliente no coincide. Etiqueta: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
+      }
+
+      // Comparar P+X (si la orden lo especifica)
+      if (verifyParams.px !== null && data.validacion_px) {
+        const pxLeido = Number(data.validacion_px.px_leido)
+        if (pxLeido !== verifyParams.px) {
+          errores.push(`P+X no coincide. Etiqueta: P+${pxLeido} · Esperado: P+${verifyParams.px}`)
+        }
+      }
+    }
+
+    verifyResult.value = errores.length === 0
+      ? { ok: true, datos: data }
+      : { ok: false, errores }
+
+    console.log('[VERIFY MODE] Resultado:', verifyResult.value)
+  }
 }
 
 // --- P+X Validation ---
@@ -1147,6 +1220,52 @@ const showError = (message) => {
   color: #4a5568;
   margin: 16px 0 0;
   font-style: italic;
+}
+
+/* Estados OK / KO */
+.verify-icon-ok { animation: pop 0.4s ease-out; }
+.verify-icon-ko { animation: shake 0.4s ease-out; }
+.verify-title-ok { color: #38a169; }
+.verify-title-ko { color: #e53e3e; }
+.verify-info-ok {
+  border-left-color: #38a169;
+  background: #f0fff4;
+}
+.verify-info-ko {
+  border-left-color: #e53e3e;
+  background: #fff5f5;
+  color: #742a2a;
+}
+.verify-error {
+  padding: 6px 0;
+  font-weight: 500;
+}
+.btn-reintentar {
+  margin-top: 16px;
+  background: linear-gradient(135deg, #4299e1, #3182ce);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+}
+.btn-reintentar:hover {
+  background: linear-gradient(135deg, #3182ce, #2c5282);
+  transform: translateY(-1px);
+}
+@keyframes pop {
+  0%   { transform: scale(0.5); opacity: 0; }
+  60%  { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-8px); }
+  75%      { transform: translateX(8px); }
 }
 
 .turno-card {
