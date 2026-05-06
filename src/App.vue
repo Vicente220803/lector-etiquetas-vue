@@ -537,13 +537,6 @@ const enviarResultadoVerificacion = async () => {
   }
 }
 
-// Cuando EAN coincide en modo verificación, disparar el envío del resultado
-watch(eanCoincide, (val) => {
-  if (verifyMode.value && val === true && verifyResult.value?.ok) {
-    enviarResultadoVerificacion()
-  }
-})
-
 // --- TURNO STATE ---
 const turnoActivo = ref(false)
 const turnoInicioHora = ref('')
@@ -621,6 +614,13 @@ const diaJuliano = computed(() => {
 const eanCoincide = computed(() => {
   if (!eanEscaneado.value || !formData.value.ean) return null
   return formData.value.ean.trim() === eanEscaneado.value.trim()
+})
+
+// En modo verificación, cuando EAN coincide → disparar el envío del resultado
+watch(eanCoincide, (val) => {
+  if (verifyMode.value && val === true && verifyResult.value?.ok) {
+    enviarResultadoVerificacion()
+  }
 })
 
 // P+X validation ranges por tipo de producto y cliente
