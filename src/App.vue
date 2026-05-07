@@ -610,6 +610,11 @@ const diaJuliano = computed(() => {
   return Math.floor(diff / 86400000)
 })
 
+// Lote esperado para etiquetas de coco hechas HOY: "001" + día juliano (3 dígitos)
+const loteEsperadoCoco = computed(() => {
+  return '001' + String(diaJuliano.value).padStart(3, '0')
+})
+
 
 const eanCoincide = computed(() => {
   if (!eanEscaneado.value || !formData.value.ean) return null
@@ -833,6 +838,16 @@ const aplicarDatosOCR = (data) => {
   }
 
   datosExtraidos.value = true
+
+  // === MODO COCO: avisar si el lote no coincide con el esperado de hoy ===
+  if (modoProducto.value === 'coco' && formData.value.lote && !verifyMode.value) {
+    const loteOCRLimpio = formData.value.lote.replace(/\s+/g, '')
+    if (!loteOCRLimpio.includes(loteEsperadoCoco.value)) {
+      pxAlertTitle.value = '⚠️ LOTE NO COINCIDE'
+      pxAlertMessage.value = `La etiqueta tiene lote "${formData.value.lote}" pero hoy el lote esperado es "${loteEsperadoCoco.value}" (día ${diaJuliano.value}). ¿Estás seguro de que la etiqueta es de hoy?`
+      showPxAlert.value = true
+    }
+  }
 
   // === MODO VERIFICACIÓN: comparar contra los parámetros de la orden ===
   if (verifyMode.value && verifyParams) {
