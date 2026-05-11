@@ -865,6 +865,17 @@ const procesarRespuestaCaja = (data) => {
       errores.push(`Cliente caja no coincide. Caja: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
     }
 
+    // Comparar lote de la caja con el del bote (si ambos lo tienen)
+    // Esto detecta cajas de OTRAS órdenes con misma fecha pero distinto lote
+    const loteBote = verifyResult.value?.datos?.lote
+    const loteCajaRaw = data.datos_extraidos?.lote
+    if (loteBote && loteCajaRaw && loteCajaRaw !== 'No detectado') {
+      const normLote = (l) => String(l || '').replace(/\s+/g, '').trim()
+      if (normLote(loteCajaRaw) !== normLote(loteBote)) {
+        errores.push(`Lote caja no coincide con el bote. Caja: ${loteCajaRaw} · Bote: ${loteBote}`)
+      }
+    }
+
     // Comparar fecha caducidad SOLO si la caja la trae (algunos clientes como ALDI no la imprimen)
     const cajaTieneFecha = data.fecha_caducidad && data.fecha_caducidad !== 'No detectado'
     if (verifyParams.fechaCad && cajaTieneFecha) {
@@ -909,7 +920,10 @@ const formatLabel = (key) => {
     codigo_r: 'Código R',
     fecha_caducidad: 'Fecha caducidad',
     formato: 'Formato',
-    ean: 'EAN'
+    ean: 'EAN',
+    lote: 'Lote',
+    unidades: 'Unidades',
+    origen: 'Origen'
   }
   return map[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
