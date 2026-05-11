@@ -865,8 +865,9 @@ const procesarRespuestaCaja = (data) => {
       errores.push(`Cliente caja no coincide. Caja: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
     }
 
-    // Comparar fecha caducidad (normaliza separadores Y expande año de 2 a 4 dígitos)
-    if (verifyParams.fechaCad) {
+    // Comparar fecha caducidad SOLO si la caja la trae (algunos clientes como ALDI no la imprimen)
+    const cajaTieneFecha = data.fecha_caducidad && data.fecha_caducidad !== 'No detectado'
+    if (verifyParams.fechaCad && cajaTieneFecha) {
       const normalizar = (f) => {
         if (!f) return ''
         let s = String(f).replace(/[.\-]/g, '/').trim()
@@ -905,7 +906,8 @@ const formatLabel = (key) => {
     codigo_articulo: 'Código artículo',
     fecha_envasado: 'Fecha envasado',
     codigo_r: 'Código R',
-    fecha_caducidad: 'Fecha caducidad'
+    fecha_caducidad: 'Fecha caducidad',
+    formato: 'Formato'
   }
   return map[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
