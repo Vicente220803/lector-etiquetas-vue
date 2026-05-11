@@ -85,7 +85,7 @@
               <b>{{ formatLabel(key) }}:</b> {{ val }}
             </div>
           </div>
-          <p class="verify-hint">{{ resultadoEnviado ? '✓ Resultado guardado y notificado' : '⏳ Enviando resultado...' }}</p>
+          <p class="verify-hint">{{ resultadoEnviado ? '✓ Resultado guardado · Volviendo a Hoja de Fabricación...' : '⏳ Enviando resultado...' }}</p>
         </template>
 
         <!-- Estado 4: verificación KO del bote -->
@@ -468,6 +468,7 @@ const verifyMode = ref(verifyParams !== null)
 const verifyResult = ref(null) // null | { ok: true, datos } | { ok: false, errores: [...] }
 const cajaResult = ref(null)   // null | { ok: true, datos } | { ok: false, errores: [...] }
 const pidiendoCaja = ref(false) // true cuando estamos esperando la foto de la caja
+const fileCaja = ref(null)     // File object de la foto de caja (para guardar/enviar)
 const eanInputRef = ref(null)
 
 if (verifyParams) {
@@ -494,6 +495,7 @@ const reintentarVerificacion = () => {
   resultadoEnviado.value = false
   cajaResult.value = null
   pidiendoCaja.value = false
+  fileCaja.value = null
   showCamera.value = true
 }
 
@@ -522,23 +524,32 @@ const enviarResultadoVerificacion = async () => {
   const timestamp = new Date().toISOString()
   const horaActual = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
 
+  // Convertir las fotos a base64 para incluirlas en el email
+  const fotoBote = fileToUpload.value ? await fileToBase64(fileToUpload.value) : null
+  const fotoCaja = fileCaja.value ? await fileToBase64(fileCaja.value) : null
+
   const payload = {
     cliente: datos.cliente,
     producto_db: datos.producto_db,
     origen: datos.origen,
     ean: datos.ean,
     lote: datos.lote,
+    codigo_r: datos.codigo_r,
     fecha_envasado: datos.fecha_envasado,
     fecha_caducidad: datos.fecha_caducidad,
+    precio_kg: datos.precio_kg,
     peso_neto: datos.peso_neto,
+    importe: datos.importe,
     px_usuario: String(datos.validacion_px?.px_leido || ''),
     responsable: 'Verificación automática (Hoja de Fabricación)',
     hora_guardado: horaActual,
     order_id: verifyParams.orderId,
+    foto_base64: fotoBote,
     caja: datosCaja ? {
       cliente: datosCaja.cliente,
       fecha_caducidad: datosCaja.fecha_caducidad,
-      datos_extraidos: datosCaja.datos_extraidos || {}
+      datos_extraidos: datosCaja.datos_extraidos || {},
+      foto_base64: fotoCaja
     } : null
   }
 
@@ -583,6 +594,15 @@ const enviarResultadoVerificacion = async () => {
   } else {
     console.log('[VERIFY] No hay app padre (estás abriendo la URL directa). Mensaje que se enviaría:', mensaje)
   }
+
+  // 4. Cerrar ventana automáticamente tras 2,5 segundos (en testing, intenta window.close
+  //    aunque el navegador puede bloquearlo. En producción el iframe ya se habrá cerrado
+  //    desde el padre al recibir el postMessage)
+  setTimeout(() => {
+    try {
+      window.close()
+    } catch (e) { /* navegador bloqueó el cierre, no hacemos nada */ }
+  }, 2500)
 }
 
 // --- TURNO STATE ---
@@ -771,7 +791,13 @@ const closeCamera = () => {
 const handleImageCaptured = (file) => {
   isCapturingImage.value = true
   capturedImageFile = file
-  fileToUpload.value = file
+
+  // Guardar el File en la ref correcta según la fase
+  if (pidiendoCaja.value) {
+    fileCaja.value = file  // foto de la caja (no sobreescribe la del bote)
+  } else {
+    fileToUpload.value = file  // foto del bote
+  }
 
   const cacheKey = file.name + file.size
   if (imageCache.has(cacheKey)) {
@@ -788,7 +814,7 @@ const handleImageCaptured = (file) => {
 
   closeCamera()
 
-  // Si estamos pidiendo la foto de la caja, enviar al webhook caja
+  // Enviar al webhook correspondiente
   if (pidiendoCaja.value) {
     enviarAOCRCaja(file)
   } else {
@@ -867,6 +893,7 @@ const procesarRespuestaCaja = (data) => {
 
 const reintentarCaja = () => {
   cajaResult.value = null
+  fileCaja.value = null
   showCamera.value = true
 }
 
