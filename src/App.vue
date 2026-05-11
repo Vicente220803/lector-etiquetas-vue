@@ -78,7 +78,12 @@
             <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
             <div><b>EAN:</b> {{ verifyResult.datos.ean }}</div>
             <div><b>P+X:</b> {{ verifyResult.datos.validacion_px?.px_leido }}</div>
-            <div v-if="cajaResult?.ok"><b>Caja:</b> ✅ verificada</div>
+          </div>
+          <div v-if="cajaResult?.ok && cajaResult.datos?.datos_extraidos" class="verify-info verify-info-ok" style="margin-top:10px;">
+            <div style="font-weight:700;margin-bottom:6px;">📦 Datos de la caja:</div>
+            <div v-for="(val, key) in cajaResult.datos.datos_extraidos" :key="key" v-show="val">
+              <b>{{ formatLabel(key) }}:</b> {{ val }}
+            </div>
           </div>
           <p class="verify-hint">{{ resultadoEnviado ? '✓ Resultado guardado y notificado' : '⏳ Enviando resultado...' }}</p>
         </template>
@@ -532,7 +537,8 @@ const enviarResultadoVerificacion = async () => {
     order_id: verifyParams.orderId,
     caja: datosCaja ? {
       cliente: datosCaja.cliente,
-      fecha_caducidad: datosCaja.fecha_caducidad
+      fecha_caducidad: datosCaja.fecha_caducidad,
+      datos_extraidos: datosCaja.datos_extraidos || {}
     } : null
   }
 
@@ -852,6 +858,19 @@ const procesarRespuestaCaja = (data) => {
 const reintentarCaja = () => {
   cajaResult.value = null
   showCamera.value = true
+}
+
+// Convierte una clave tipo "codigo_proveedor" en "Código proveedor" para mostrar bonito
+const formatLabel = (key) => {
+  const map = {
+    codigo_proveedor: 'Código proveedor',
+    producto: 'Producto',
+    codigo_articulo: 'Código artículo',
+    fecha_envasado: 'Fecha envasado',
+    codigo_r: 'Código R',
+    fecha_caducidad: 'Fecha caducidad'
+  }
+  return map[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
 const handleFileChange = () => {
