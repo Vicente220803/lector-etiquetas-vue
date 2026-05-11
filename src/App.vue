@@ -839,9 +839,19 @@ const procesarRespuestaCaja = (data) => {
       errores.push(`Cliente caja no coincide. Caja: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
     }
 
-    // Comparar fecha caducidad (normalizar separadores)
+    // Comparar fecha caducidad (normaliza separadores Y expande año de 2 a 4 dígitos)
     if (verifyParams.fechaCad) {
-      const normalizar = (f) => (f || '').replace(/[.\-]/g, '/').trim()
+      const normalizar = (f) => {
+        if (!f) return ''
+        let s = String(f).replace(/[.\-]/g, '/').trim()
+        // dd/mm/yy → dd/mm/20yy (asumimos siglo XXI)
+        const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/)
+        if (m2) return `${m2[1].padStart(2, '0')}/${m2[2].padStart(2, '0')}/20${m2[3]}`
+        // dd/mm/yyyy → asegurar zero-padding
+        const m4 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+        if (m4) return `${m4[1].padStart(2, '0')}/${m4[2].padStart(2, '0')}/${m4[3]}`
+        return s
+      }
       if (normalizar(data.fecha_caducidad) !== normalizar(verifyParams.fechaCad)) {
         errores.push(`Fecha caducidad caja no coincide. Caja: ${data.fecha_caducidad || '—'} · Esperado: ${verifyParams.fechaCad}`)
       }
