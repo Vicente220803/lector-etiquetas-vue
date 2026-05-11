@@ -907,7 +907,8 @@ const formatLabel = (key) => {
     fecha_envasado: 'Fecha envasado',
     codigo_r: 'Código R',
     fecha_caducidad: 'Fecha caducidad',
-    formato: 'Formato'
+    formato: 'Formato',
+    ean: 'EAN'
   }
   return map[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
