@@ -39,7 +39,35 @@
           <p v-else class="verify-hint">📲 Pasa el lector sobre el código de barras</p>
         </template>
 
-        <!-- Estado 3: OCR + EAN ambos OK → VERIFICADO -->
+        <!-- Estado 3a: Bote OK + EAN OK, esperando foto de la CAJA -->
+        <template v-else-if="verifyResult.ok && eanCoincide === true && verifyResult.datos?.etiqueta_de_caja === true && !cajaResult">
+          <div class="verify-icon">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><path d="M21 8l-9 4-9-4m18 0v8l-9 4-9-4V8m18 0L12 4 3 8" stroke="#1a365d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h2 class="verify-title">📦 AHORA LA CAJA</h2>
+          <p v-if="isProcessing" class="verify-subtitle">⏳ Analizando la caja, espera...</p>
+          <p v-else class="verify-subtitle">Este producto requiere también etiqueta de caja. Haz la foto.</p>
+          <div class="verify-info verify-info-ok">
+            <div><b>Bote verificado:</b> ✅</div>
+            <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
+            <div><b>EAN:</b> {{ verifyResult.datos.ean }}</div>
+          </div>
+        </template>
+
+        <!-- Estado 3b: Caja KO -->
+        <template v-else-if="verifyResult.ok && eanCoincide === true && cajaResult && !cajaResult.ok">
+          <div class="verify-icon verify-icon-ko">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#e53e3e" stroke-width="2"/><path d="M9 9l6 6M15 9l-6 6" stroke="#e53e3e" stroke-width="2.5" stroke-linecap="round"/></svg>
+          </div>
+          <h2 class="verify-title verify-title-ko">CAJA NO COINCIDE</h2>
+          <p class="verify-subtitle">La etiqueta de caja no coincide con la orden</p>
+          <div class="verify-info verify-info-ko">
+            <div v-for="(err, i) in cajaResult.errores" :key="i" class="verify-error">⚠️ {{ err }}</div>
+          </div>
+          <button @click="reintentarCaja" class="btn-reintentar">↻ Reintentar foto caja</button>
+        </template>
+
+        <!-- Estado 3c: TODO verificado (bote + EAN + caja si aplica) → VERIFICADO -->
         <template v-else-if="verifyResult.ok && eanCoincide === true">
           <div class="verify-icon verify-icon-ok">
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#38a169" stroke="#38a169" stroke-width="2"/><path d="M8 12l3 3 5-6" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -50,11 +78,12 @@
             <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
             <div><b>EAN:</b> {{ verifyResult.datos.ean }}</div>
             <div><b>P+X:</b> {{ verifyResult.datos.validacion_px?.px_leido }}</div>
+            <div v-if="cajaResult?.ok"><b>Caja:</b> ✅ verificada</div>
           </div>
           <p class="verify-hint">{{ resultadoEnviado ? '✓ Resultado guardado y notificado' : '⏳ Enviando resultado...' }}</p>
         </template>
 
-        <!-- Estado 3: verificación KO -->
+        <!-- Estado 4: verificación KO del bote -->
         <template v-else>
           <div class="verify-icon verify-icon-ko">
             <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#e53e3e" stroke-width="2"/><path d="M9 9l6 6M15 9l-6 6" stroke="#e53e3e" stroke-width="2.5" stroke-linecap="round"/></svg>
@@ -411,6 +440,7 @@ import { jsPDF } from 'jspdf'
 
 const webhookUrl = 'https://surexportlevante.app.n8n.cloud/webhook/65eeb484-7bfd-48fe-b09d-594e2204b6bf'
 const webhookCocoUrl = 'https://surexportlevante.app.n8n.cloud/webhook/842d2503-5f47-41e2-8388-17cbbdbc5a09'
+const webhookCajaUrl = 'https://surexportlevante.app.n8n.cloud/webhook/d8a44c23-fed4-499b-8546-bea698e04cd1'
 const webhookInformeTurnoUrl = 'https://surexportlevante.app.n8n.cloud/webhook/6e531e4e-2a41-46d6-ae7e-7a2a6e8bb578'
 const webhookEmailEtiquetaUrl = 'https://surexportlevante.app.n8n.cloud/webhook/2306cff7-de6a-41c0-a05d-b97f12b43eb8'
 
@@ -425,11 +455,14 @@ const verifyParams = (() => {
     modoProducto: params.get('modo_producto') || 'pina',
     cliente: params.get('cliente') || '',
     px: params.get('px') ? Number(params.get('px')) : null,
+    fechaCad: params.get('fecha_cad') || '',
     orderId: params.get('order_id') || ''
   }
 })()
 const verifyMode = ref(verifyParams !== null)
 const verifyResult = ref(null) // null | { ok: true, datos } | { ok: false, errores: [...] }
+const cajaResult = ref(null)   // null | { ok: true, datos } | { ok: false, errores: [...] }
+const pidiendoCaja = ref(false) // true cuando estamos esperando la foto de la caja
 const eanInputRef = ref(null)
 
 if (verifyParams) {
@@ -454,6 +487,8 @@ const reintentarVerificacion = () => {
   datosExtraidos.value = false
   eanEscaneado.value = ''
   resultadoEnviado.value = false
+  cajaResult.value = null
+  pidiendoCaja.value = false
   showCamera.value = true
 }
 
@@ -473,9 +508,12 @@ const resultadoEnviado = ref(false)
 const enviarResultadoVerificacion = async () => {
   if (resultadoEnviado.value) return
   if (!verifyMode.value || !verifyResult.value?.ok || eanCoincide.value !== true) return
+  // Si el producto requiere caja, exigir que la caja también esté verificada OK
+  if (verifyResult.value.datos?.etiqueta_de_caja === true && !cajaResult.value?.ok) return
   resultadoEnviado.value = true
 
   const datos = verifyResult.value.datos
+  const datosCaja = cajaResult.value?.datos || null
   const timestamp = new Date().toISOString()
   const horaActual = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
 
@@ -491,7 +529,11 @@ const enviarResultadoVerificacion = async () => {
     px_usuario: String(datos.validacion_px?.px_leido || ''),
     responsable: 'Verificación automática (Hoja de Fabricación)',
     hora_guardado: horaActual,
-    order_id: verifyParams.orderId
+    order_id: verifyParams.orderId,
+    caja: datosCaja ? {
+      cliente: datosCaja.cliente,
+      fecha_caducidad: datosCaja.fecha_caducidad
+    } : null
   }
 
   // 1. Guardar en Supabase audit_logs
@@ -621,9 +663,25 @@ const eanCoincide = computed(() => {
   return formData.value.ean.trim() === eanEscaneado.value.trim()
 })
 
-// En modo verificación, cuando EAN coincide → disparar el envío del resultado
+// En modo verificación, cuando EAN coincide:
+// - Si el producto requiere etiqueta de caja → entrar en fase caja (abrir cámara otra vez)
+// - Si no → enviar resultado directamente
 watch(eanCoincide, (val) => {
-  if (verifyMode.value && val === true && verifyResult.value?.ok) {
+  if (!verifyMode.value || val !== true || !verifyResult.value?.ok) return
+
+  if (verifyResult.value.datos?.etiqueta_de_caja === true) {
+    // Activar fase caja y abrir cámara
+    pidiendoCaja.value = true
+    setTimeout(() => { showCamera.value = true }, 600)
+  } else {
+    // No requiere caja → enviar resultado directamente
+    enviarResultadoVerificacion()
+  }
+})
+
+// Cuando la verificación de la caja termina OK → enviar resultado final
+watch(cajaResult, (val) => {
+  if (verifyMode.value && val?.ok) {
     enviarResultadoVerificacion()
   }
 })
@@ -723,7 +781,77 @@ const handleImageCaptured = (file) => {
   }, 500)
 
   closeCamera()
-  enviarAOCR(file)
+
+  // Si estamos pidiendo la foto de la caja, enviar al webhook caja
+  if (pidiendoCaja.value) {
+    enviarAOCRCaja(file)
+  } else {
+    enviarAOCR(file)
+  }
+}
+
+const enviarAOCRCaja = async (file) => {
+  isProcessing.value = true
+
+  const formDataSend = new FormData()
+  formDataSend.append('file', file)
+
+  try {
+    const response = await fetch(webhookCajaUrl, {
+      method: 'POST',
+      body: formDataSend,
+    })
+
+    if (!response.ok) throw new Error(`Error del servidor: ${response.status}`)
+
+    const data = await response.json()
+    if (!data) throw new Error('La respuesta del webhook caja está vacía.')
+
+    procesarRespuestaCaja(data)
+  } catch (error) {
+    cajaResult.value = { ok: false, errores: [`Error analizando caja: ${error.message}`] }
+  } finally {
+    isProcessing.value = false
+  }
+}
+
+const procesarRespuestaCaja = (data) => {
+  if (!verifyMode.value || !verifyParams) return
+
+  const errores = []
+
+  if (data.bloqueo_ia || data.cliente === 'REINTENTAR') {
+    errores.push('La IA no pudo procesar la imagen de la caja. Vuelve a hacer la foto.')
+  } else {
+    // Comparar cliente (FLEXIBLE: uno contiene al otro)
+    // Ej: caja dice "MERCADONA", orden dice "MERCADONA SA" → coinciden
+    const clienteCaja = (data.cliente || '').toUpperCase().trim()
+    const clienteEsperado = (verifyParams.cliente || '').toUpperCase().trim()
+    if (!clienteCaja || clienteCaja === 'OTROS') {
+      errores.push('No se detectó cliente en la caja')
+    } else if (!clienteCaja.includes(clienteEsperado) && !clienteEsperado.includes(clienteCaja)) {
+      errores.push(`Cliente caja no coincide. Caja: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
+    }
+
+    // Comparar fecha caducidad (normalizar separadores)
+    if (verifyParams.fechaCad) {
+      const normalizar = (f) => (f || '').replace(/[.\-]/g, '/').trim()
+      if (normalizar(data.fecha_caducidad) !== normalizar(verifyParams.fechaCad)) {
+        errores.push(`Fecha caducidad caja no coincide. Caja: ${data.fecha_caducidad || '—'} · Esperado: ${verifyParams.fechaCad}`)
+      }
+    }
+  }
+
+  cajaResult.value = errores.length === 0
+    ? { ok: true, datos: data }
+    : { ok: false, errores }
+
+  console.log('[VERIFY CAJA] Resultado:', cajaResult.value)
+}
+
+const reintentarCaja = () => {
+  cajaResult.value = null
+  showCamera.value = true
 }
 
 const handleFileChange = () => {
