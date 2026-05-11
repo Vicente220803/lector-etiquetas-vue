@@ -901,6 +901,7 @@ const reintentarCaja = () => {
 // Convierte una clave tipo "codigo_proveedor" en "Código proveedor" para mostrar bonito
 const formatLabel = (key) => {
   const map = {
+    proveedor: 'Proveedor',
     codigo_proveedor: 'Código proveedor',
     producto: 'Producto',
     codigo_articulo: 'Código artículo',
