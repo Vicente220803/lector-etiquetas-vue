@@ -4,13 +4,34 @@
     <div v-if="verifyMode" class="verify-screen">
       <div class="verify-card">
 
-        <!-- Estado 1: esperando foto / procesando OCR -->
-        <template v-if="!verifyResult">
+        <!-- Estado AUTO-A: no se ha encontrado orden coincidente -->
+        <template v-if="matchStatus === 'no-match'">
+          <div class="verify-icon verify-icon-ko">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#e53e3e" stroke-width="2"/><path d="M9 9l6 6M15 9l-6 6" stroke="#e53e3e" stroke-width="2.5" stroke-linecap="round"/></svg>
+          </div>
+          <h2 class="verify-title verify-title-ko">SIN COINCIDENCIA</h2>
+          <p class="verify-subtitle">{{ matchMensaje }}</p>
+          <button @click="reintentarVerificacion" class="btn-reintentar">↻ Reintentar foto</button>
+        </template>
+
+        <!-- Estado AUTO-B: la orden ya estaba verificada -->
+        <template v-else-if="matchStatus === 'already-verified'">
+          <div class="verify-icon">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#dd6b20" stroke-width="2"/><path d="M12 8v4M12 16h.01" stroke="#dd6b20" stroke-width="2.5" stroke-linecap="round"/></svg>
+          </div>
+          <h2 class="verify-title" style="color:#dd6b20;">YA VERIFICADA</h2>
+          <p class="verify-subtitle">{{ matchMensaje }}</p>
+          <button @click="reintentarVerificacion" class="btn-reintentar">↻ Reintentar foto</button>
+        </template>
+
+        <!-- Estado 1: esperando foto / procesando OCR / buscando match -->
+        <template v-else-if="!verifyResult">
           <div class="verify-icon">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" stroke="#1a365d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <h2 class="verify-title">VERIFICAR ETIQUETA</h2>
-          <p v-if="isProcessing" class="verify-subtitle">⏳ Analizando etiqueta, espera unos segundos...</p>
+          <p v-if="matchStatus === 'waiting'" class="verify-subtitle">🔎 Buscando orden coincidente...</p>
+          <p v-else-if="isProcessing" class="verify-subtitle">⏳ Analizando etiqueta, espera unos segundos...</p>
           <p v-else class="verify-subtitle">📸 Haz la foto de la etiqueta</p>
         </template>
 
@@ -453,10 +474,14 @@ const webhookEmailEtiquetaUrl = 'https://surexportlevante.app.n8n.cloud/webhook/
 const isSimulationMode = ref(false)
 
 // --- MODO VERIFICACIÓN (para integración con Hoja de Fabricación) ---
+// Modo 'verify': URL trae todos los datos esperados (cliente, px, fecha_cad, order_id)
+// Modo 'verify-auto': URL solo trae mode=verify-auto. El lector hace OCR y pregunta al padre qué orden coincide.
 const verifyParams = (() => {
   const params = new URLSearchParams(window.location.search)
-  if (params.get('mode') !== 'verify') return null
+  const mode = params.get('mode')
+  if (mode !== 'verify' && mode !== 'verify-auto') return null
   return {
+    autoMode: mode === 'verify-auto',
     modoProducto: params.get('modo_producto') || 'pina',
     cliente: params.get('cliente') || '',
     px: params.get('px') ? Number(params.get('px')) : null,
@@ -470,6 +495,10 @@ const cajaResult = ref(null)   // null | { ok: true, datos } | { ok: false, erro
 const pidiendoCaja = ref(false) // true cuando estamos esperando la foto de la caja
 const fileCaja = ref(null)     // File object de la foto de caja (para guardar/enviar)
 const eanInputRef = ref(null)
+// Auto mode: estado de búsqueda de orden tras OCR del bote
+const matchStatus = ref(null)  // null | 'waiting' | 'no-match' | 'already-verified'
+const matchMensaje = ref('')   // mensaje a mostrar en no-match / already-verified
+const boteDataPending = ref(null) // datos OCR guardados mientras esperamos al padre
 
 if (verifyParams) {
   console.log('[VERIFY MODE] Parámetros recibidos:', verifyParams)
@@ -483,8 +512,52 @@ onMounted(() => {
       modoProducto.value = 'coco'
     }
     showCamera.value = true
+
+    // En modo auto, escuchar las respuestas del padre (order-matched / no-match / already-verified)
+    if (verifyParams.autoMode) {
+      window.addEventListener('message', handleParentMessage)
+    }
   }
 })
+
+// Handler de mensajes del padre cuando estamos en modo verify-auto
+const handleParentMessage = (event) => {
+  const msg = event.data
+  if (!msg || msg.source !== 'hoja-fabricacion') return
+
+  console.log('[VERIFY AUTO] Mensaje del padre:', msg)
+
+  if (msg.type === 'order-matched' && msg.order) {
+    // Actualizar verifyParams con los datos de la orden encontrada
+    verifyParams.cliente = msg.order.cliente || ''
+    verifyParams.px = msg.order.px ?? null
+    verifyParams.fechaCad = msg.order.fecha_cad || ''
+    verifyParams.orderId = String(msg.order.id || '')
+    verifyParams.modoProducto = msg.order.modo_producto || 'pina'
+
+    // Si es coco, actualizar el toggle interno
+    if (verifyParams.modoProducto === 'coco') {
+      modoProducto.value = 'coco'
+    }
+
+    // Resetear status de búsqueda y ejecutar la comparación con los datos guardados
+    matchStatus.value = null
+    if (boteDataPending.value) {
+      compararBoteConOrden(boteDataPending.value)
+      boteDataPending.value = null
+    }
+  }
+
+  if (msg.type === 'no-match') {
+    matchStatus.value = 'no-match'
+    matchMensaje.value = msg.mensaje || 'Esta etiqueta no corresponde a ninguna orden de hoy'
+  }
+
+  if (msg.type === 'already-verified') {
+    matchStatus.value = 'already-verified'
+    matchMensaje.value = `Esta orden (${msg.orderId}) ya fue verificada anteriormente`
+  }
+}
 
 // Reintentar verificación (limpia resultado y vuelve a abrir cámara)
 const reintentarVerificacion = () => {
@@ -496,6 +569,16 @@ const reintentarVerificacion = () => {
   cajaResult.value = null
   pidiendoCaja.value = false
   fileCaja.value = null
+  matchStatus.value = null
+  matchMensaje.value = ''
+  boteDataPending.value = null
+  // En modo auto, también limpiamos los params recibidos para volver a buscar match
+  if (verifyParams?.autoMode) {
+    verifyParams.cliente = ''
+    verifyParams.px = null
+    verifyParams.fechaCad = ''
+    verifyParams.orderId = ''
+  }
   showCamera.value = true
 }
 
@@ -1053,34 +1136,67 @@ const aplicarDatosOCR = (data) => {
     }
   }
 
-  // === MODO VERIFICACIÓN: comparar contra los parámetros de la orden ===
+  // === MODO VERIFICACIÓN ===
   if (verifyMode.value && verifyParams) {
-    const errores = []
-
-    // ¿La IA falló completamente?
-    if (data.bloqueo_ia || data.cliente === 'REINTENTAR') {
-      errores.push('La IA no pudo procesar la imagen. Vuelve a hacer la foto.')
-    } else {
-      // Comparar cliente
-      if ((data.cliente || '').toUpperCase() !== verifyParams.cliente.toUpperCase()) {
-        errores.push(`Cliente no coincide. Etiqueta: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
+    // MODO AUTO: aún no tenemos los datos de la orden. Enviar bote al padre para que busque match.
+    if (verifyParams.autoMode && !verifyParams.cliente) {
+      boteDataPending.value = data
+      matchStatus.value = 'waiting'
+      const mensaje = {
+        source: 'lector-etiquetas',
+        type: 'bote-analyzed',
+        data: JSON.parse(JSON.stringify({
+          cliente: data.cliente,
+          producto_db: data.producto_db,
+          ean: data.ean,
+          lote: data.lote,
+          fecha_envasado: data.fecha_envasado,
+          fecha_caducidad: data.fecha_caducidad,
+          peso_neto: data.peso_neto,
+          origen: data.origen,
+          codigo_r: data.codigo_r,
+          px_leido: data.validacion_px?.px_leido ?? null,
+          etiqueta_de_caja: data.etiqueta_de_caja === true
+        }))
       }
-
-      // Comparar P+X (si la orden lo especifica)
-      if (verifyParams.px !== null && data.validacion_px) {
-        const pxLeido = Number(data.validacion_px.px_leido)
-        if (pxLeido !== verifyParams.px) {
-          errores.push(`P+X no coincide. Etiqueta: P+${pxLeido} · Esperado: P+${verifyParams.px}`)
-        }
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(mensaje, '*')
+        console.log('[VERIFY AUTO] bote-analyzed enviado al padre:', mensaje)
+      } else {
+        console.warn('[VERIFY AUTO] No hay padre escuchando. ¿Estás abriendo la URL directa?')
       }
+      return
     }
 
-    verifyResult.value = errores.length === 0
-      ? { ok: true, datos: data }
-      : { ok: false, errores }
-
-    console.log('[VERIFY MODE] Resultado:', verifyResult.value)
+    // MODO NORMAL (verify): comparar inmediatamente con verifyParams
+    compararBoteConOrden(data)
   }
+}
+
+// Compara los datos OCR del bote contra verifyParams y setea verifyResult
+const compararBoteConOrden = (data) => {
+  const errores = []
+
+  if (data.bloqueo_ia || data.cliente === 'REINTENTAR') {
+    errores.push('La IA no pudo procesar la imagen. Vuelve a hacer la foto.')
+  } else {
+    if ((data.cliente || '').toUpperCase() !== verifyParams.cliente.toUpperCase()) {
+      errores.push(`Cliente no coincide. Etiqueta: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
+    }
+
+    if (verifyParams.px !== null && data.validacion_px) {
+      const pxLeido = Number(data.validacion_px.px_leido)
+      if (pxLeido !== verifyParams.px) {
+        errores.push(`P+X no coincide. Etiqueta: P+${pxLeido} · Esperado: P+${verifyParams.px}`)
+      }
+    }
+  }
+
+  verifyResult.value = errores.length === 0
+    ? { ok: true, datos: data }
+    : { ok: false, errores }
+
+  console.log('[VERIFY MODE] Resultado:', verifyResult.value)
 }
 
 // --- P+X Validation ---
