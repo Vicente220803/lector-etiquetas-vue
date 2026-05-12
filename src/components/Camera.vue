@@ -46,8 +46,8 @@ const startCamera = async () => {
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: 'environment',
-        width: { ideal: 3840, min: 1280 },
-        height: { ideal: 2160, min: 720 },
+        width: { ideal: 1920, min: 1280 },
+        height: { ideal: 1080, min: 720 },
         focusMode: 'continuous',
         advanced: [{ focusMode: 'continuous' }]
       }
@@ -87,10 +87,10 @@ const captureImage = () => {
     return
   }
 
-  // Capturar a resolución completa (limitada a 2560 si supera 4K para evitar uploads gigantes)
+  // Capturar a resolución reducida (1600 px max) para encoding rápido
   const srcW = video.value.videoWidth
   const srcH = video.value.videoHeight
-  const maxW = 2560
+  const maxW = 1600
   const scale = srcW > maxW ? maxW / srcW : 1
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(srcW * scale)
@@ -114,7 +114,7 @@ const captureImage = () => {
       stopCamera()
     },
     'image/jpeg',
-    0.92
+    0.85
   )
 }
 

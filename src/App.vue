@@ -589,8 +589,10 @@ const enviarResultadoVerificacion = async () => {
     timestamp
   }
   if (window.parent && window.parent !== window) {
-    window.parent.postMessage(mensaje, '*')
-    console.log('[VERIFY] Resultado enviado al padre:', mensaje)
+    // Clonar a objeto plano para evitar DataCloneError con Proxies de Vue
+    const mensajeClonable = JSON.parse(JSON.stringify(mensaje))
+    window.parent.postMessage(mensajeClonable, '*')
+    console.log('[VERIFY] Resultado enviado al padre:', mensajeClonable)
   } else {
     console.log('[VERIFY] No hay app padre (estás abriendo la URL directa). Mensaje que se enviaría:', mensaje)
   }
