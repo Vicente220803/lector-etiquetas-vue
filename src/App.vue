@@ -1180,8 +1180,14 @@ const compararBoteConOrden = (data) => {
   if (data.bloqueo_ia || data.cliente === 'REINTENTAR') {
     errores.push('La IA no pudo procesar la imagen. Vuelve a hacer la foto.')
   } else {
-    if ((data.cliente || '').toUpperCase() !== verifyParams.cliente.toUpperCase()) {
-      errores.push(`Cliente no coincide. Etiqueta: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
+    // Comparar cliente FLEXIBLE (uno contiene al otro)
+    // Ej: OCR detecta "ALDI", la orden en Hoja de Fabricación dice "ALDI SAGUNTO" → coinciden
+    const clienteBote = (data.cliente || '').toUpperCase().trim()
+    const clienteEsperado = (verifyParams.cliente || '').toUpperCase().trim()
+    if (clienteBote && clienteEsperado) {
+      if (!clienteBote.includes(clienteEsperado) && !clienteEsperado.includes(clienteBote)) {
+        errores.push(`Cliente no coincide. Etiqueta: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
+      }
     }
 
     if (verifyParams.px !== null && data.validacion_px) {
