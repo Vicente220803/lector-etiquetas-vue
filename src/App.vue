@@ -479,7 +479,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import Camera from './components/Camera.vue'
 import { supabase } from './supabase.js'
 import { jsPDF } from 'jspdf'
@@ -537,7 +537,21 @@ onMounted(() => {
       window.addEventListener('message', handleParentMessage)
     }
   }
+  window.addEventListener('beforeunload', handleBeforeUnload)
 })
+
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+})
+
+// Avisa al operario si intenta cerrar la pestaña con un turno abierto.
+// No aplica en verify mode (iframe puede abrirse/cerrarse libremente).
+const handleBeforeUnload = (e) => {
+  if (verifyMode.value) return
+  if (!turnoActivo.value) return
+  e.preventDefault()
+  e.returnValue = ''  // requerido por Chrome/Edge para mostrar el diálogo
+}
 
 // Handler de mensajes del padre cuando estamos en modo verify-auto
 const handleParentMessage = (event) => {
