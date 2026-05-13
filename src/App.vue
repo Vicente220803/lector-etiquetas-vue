@@ -4,8 +4,35 @@
     <div v-if="verifyMode" class="verify-screen">
       <div class="verify-card">
 
+        <!-- Estado 0: SELECCIÓN DE OPERARIO (pantalla previa, antes de la cámara) -->
+        <template v-if="!operarioVerificacion">
+          <div class="verify-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" stroke="#1a365d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h2 class="verify-title">¿QUIÉN VERIFICA?</h2>
+          <p class="verify-subtitle">Selecciona tu nombre antes de hacer la foto</p>
+          <div class="turno-field" style="width:100%;margin-top:16px;">
+            <select
+              v-model="operarioVerificacion"
+              class="field-input field-select turno-select"
+              :class="{ 'field-placeholder': !operarioVerificacion }"
+            >
+              <option value="" disabled>Seleccionar operario</option>
+              <option v-for="r in listaResponsables" :key="r" :value="r">{{ r }}</option>
+            </select>
+          </div>
+          <button
+            class="btn-iniciar-turno"
+            :disabled="!operarioVerificacion"
+            @click="confirmarOperarioYAbrirCamara"
+            style="margin-top:16px;width:100%;"
+          >
+            Continuar
+          </button>
+        </template>
+
         <!-- Estado AUTO-A: no se ha encontrado orden coincidente -->
-        <template v-if="matchStatus === 'no-match'">
+        <template v-else-if="matchStatus === 'no-match'">
           <div class="verify-icon verify-icon-ko">
             <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#e53e3e" stroke-width="2"/><path d="M9 9l6 6M15 9l-6 6" stroke="#e53e3e" stroke-width="2.5" stroke-linecap="round"/></svg>
           </div>
@@ -504,21 +531,25 @@ if (verifyParams) {
   console.log('[VERIFY MODE] Parámetros recibidos:', verifyParams)
 }
 
-// Si estamos en modo verificación, abrir cámara automáticamente al cargar
+// Si estamos en modo verificación: preparar producto + escuchar al padre.
+// La cámara NO se abre automáticamente: primero hay que seleccionar el operario
+// (ver `confirmarOperarioYAbrirCamara`).
 onMounted(() => {
   if (verifyMode.value) {
-    // Si es coco, activar el modo coco para que use el webhook correcto
     if (verifyParams.modoProducto === 'coco') {
       modoProducto.value = 'coco'
     }
-    showCamera.value = true
-
-    // En modo auto, escuchar las respuestas del padre (order-matched / no-match / already-verified)
     if (verifyParams.autoMode) {
       window.addEventListener('message', handleParentMessage)
     }
   }
 })
+
+// Llamado tras seleccionar operario en la pantalla previa del verify mode
+const confirmarOperarioYAbrirCamara = () => {
+  if (!operarioVerificacion.value) return
+  showCamera.value = true
+}
 
 // Handler de mensajes del padre cuando estamos en modo verify-auto
 const handleParentMessage = (event) => {
@@ -624,7 +655,7 @@ const enviarResultadoVerificacion = async () => {
     peso_neto: datos.peso_neto,
     importe: datos.importe,
     px_usuario: String(datos.validacion_px?.px_leido || ''),
-    responsable: 'Verificación automática (Hoja de Fabricación)',
+    responsable: operarioVerificacion.value || 'Verificación automática (Hoja de Fabricación)',
     hora_guardado: horaActual,
     order_id: verifyParams.orderId,
     foto_base64: fotoBote,
@@ -746,8 +777,11 @@ const validacionPx = ref(null)
 // Last saved entry
 const ultimoRegistro = ref(null)
 
-// --- LISTS (Responsable names - placeholder, user will provide) ---
-const listaResponsables = ref(['Aurora', 'Mónica', 'Carla', 'Jorge', 'Franco'])
+// --- LISTS (Responsable names) ---
+const listaResponsables = ref(['Aurora', 'Mónica', 'Jorge Steven', 'Carlos', 'Carla'])
+
+// --- VERIFY MODE: operario que está verificando (se pregunta cada vez que se abre el iframe) ---
+const operarioVerificacion = ref('')
 
 // --- COMPUTED ---
 const fechaHoy = new Date()
