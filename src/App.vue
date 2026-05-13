@@ -4,35 +4,8 @@
     <div v-if="verifyMode" class="verify-screen">
       <div class="verify-card">
 
-        <!-- Estado 0: SELECCIÓN DE OPERARIO (pantalla previa, antes de la cámara) -->
-        <template v-if="!operarioVerificacion">
-          <div class="verify-icon">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" stroke="#1a365d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </div>
-          <h2 class="verify-title">¿QUIÉN VERIFICA?</h2>
-          <p class="verify-subtitle">Selecciona tu nombre antes de hacer la foto</p>
-          <div class="turno-field" style="width:100%;margin-top:16px;">
-            <select
-              v-model="operarioVerificacion"
-              class="field-input field-select turno-select"
-              :class="{ 'field-placeholder': !operarioVerificacion }"
-            >
-              <option value="" disabled>Seleccionar operario</option>
-              <option v-for="r in listaResponsables" :key="r" :value="r">{{ r }}</option>
-            </select>
-          </div>
-          <button
-            class="btn-iniciar-turno"
-            :disabled="!operarioVerificacion"
-            @click="confirmarOperarioYAbrirCamara"
-            style="margin-top:16px;width:100%;"
-          >
-            Continuar
-          </button>
-        </template>
-
         <!-- Estado AUTO-A: no se ha encontrado orden coincidente -->
-        <template v-else-if="matchStatus === 'no-match'">
+        <template v-if="matchStatus === 'no-match'">
           <div class="verify-icon verify-icon-ko">
             <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#e53e3e" stroke-width="2"/><path d="M9 9l6 6M15 9l-6 6" stroke="#e53e3e" stroke-width="2.5" stroke-linecap="round"/></svg>
           </div>
@@ -149,6 +122,26 @@
           <button @click="reintentarVerificacion" class="btn-reintentar">↻ Reintentar foto</button>
         </template>
 
+      </div>
+
+      <!-- Modal selección operario (flota encima de la cámara hasta que se elige uno) -->
+      <div v-if="!operarioVerificacion" class="operario-modal-overlay">
+        <div class="operario-modal">
+          <div class="verify-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" stroke="#1a365d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h2 class="verify-title">¿QUIÉN VERIFICA?</h2>
+          <p class="verify-subtitle">Selecciona tu nombre para continuar</p>
+          <select
+            v-model="operarioVerificacion"
+            class="field-input field-select turno-select"
+            :class="{ 'field-placeholder': !operarioVerificacion }"
+            style="margin-top:16px;width:100%;"
+          >
+            <option value="" disabled>Seleccionar operario</option>
+            <option v-for="r in listaResponsables" :key="r" :value="r">{{ r }}</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -531,25 +524,20 @@ if (verifyParams) {
   console.log('[VERIFY MODE] Parámetros recibidos:', verifyParams)
 }
 
-// Si estamos en modo verificación: preparar producto + escuchar al padre.
-// La cámara NO se abre automáticamente: primero hay que seleccionar el operario
-// (ver `confirmarOperarioYAbrirCamara`).
+// Si estamos en modo verificación, abrir cámara automáticamente al cargar.
+// El selector de operario aparece como modal flotante encima de la cámara
+// (el operario selecciona mientras la cámara se va calentando en segundo plano).
 onMounted(() => {
   if (verifyMode.value) {
     if (verifyParams.modoProducto === 'coco') {
       modoProducto.value = 'coco'
     }
+    showCamera.value = true
     if (verifyParams.autoMode) {
       window.addEventListener('message', handleParentMessage)
     }
   }
 })
-
-// Llamado tras seleccionar operario en la pantalla previa del verify mode
-const confirmarOperarioYAbrirCamara = () => {
-  if (!operarioVerificacion.value) return
-  showCamera.value = true
-}
 
 // Handler de mensajes del padre cuando estamos en modo verify-auto
 const handleParentMessage = (event) => {
@@ -2243,6 +2231,36 @@ const showError = (message) => {
   inset: 0;
   z-index: 2000;
   background: black;
+}
+
+/* ========== OPERARIO SELECTOR (modal flotante encima de la cámara) ========== */
+.operario-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.operario-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 32px 24px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  text-align: center;
+}
+
+.operario-modal .verify-icon {
+  margin: 0 auto 12px;
+}
+
+.operario-modal h2.verify-title {
+  margin: 0 0 8px;
 }
 
 /* ========== PROCESSING ========== */
