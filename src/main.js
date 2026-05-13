@@ -12,7 +12,11 @@ function instanciaActiva() {
   return Date.now() - parseInt(ultimo) < STALE_TIMEOUT
 }
 
-if (instanciaActiva()) {
+// El lock solo aplica al modo turno normal. En verify mode (iframe de la Hoja de
+// Fabricación) la app se abre y cierra constantemente, así que no bloqueamos.
+const esVerifyMode = /[?&]mode=verify(-auto)?(&|$)/.test(window.location.search)
+
+if (!esVerifyMode && instanciaActiva()) {
   // Ya hay una pestaña con la app abierta
   document.body.style.cssText = 'margin:0;font-family:Arial,sans-serif;background:#f0f4f8'
   document.body.innerHTML = `
@@ -29,17 +33,20 @@ if (instanciaActiva()) {
     </div>`
   window.close()
 } else {
-  // Esta pestaña es la instancia principal
-  localStorage.setItem(INSTANCE_KEY, Date.now().toString())
-
-  const intervalo = setInterval(() => {
+  // En modo turno normal mantenemos el lock (un único turno simultáneo).
+  // En verify mode (iframe) NO tocamos la clave: el lock pertenece al turno padre.
+  if (!esVerifyMode) {
     localStorage.setItem(INSTANCE_KEY, Date.now().toString())
-  }, PING_INTERVAL)
 
-  window.addEventListener('beforeunload', () => {
-    clearInterval(intervalo)
-    localStorage.removeItem(INSTANCE_KEY)
-  })
+    const intervalo = setInterval(() => {
+      localStorage.setItem(INSTANCE_KEY, Date.now().toString())
+    }, PING_INTERVAL)
+
+    window.addEventListener('beforeunload', () => {
+      clearInterval(intervalo)
+      localStorage.removeItem(INSTANCE_KEY)
+    })
+  }
 
   createApp(App).mount('#app')
 }
