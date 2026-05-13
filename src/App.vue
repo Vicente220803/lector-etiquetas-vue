@@ -770,6 +770,12 @@ const loteEsperadoCoco = computed(() => {
 
 
 const eanCoincide = computed(() => {
+  // Verify mode + producto identificado SIN EAN en BBDD + etiqueta tampoco lo trae → saltar control
+  if (
+    verifyMode.value &&
+    verifyResult.value?.datos?.producto_sin_ean === true &&
+    formData.value.ean === 'No detectado'
+  ) return true
   if (!eanEscaneado.value || !formData.value.ean) return null
   return formData.value.ean.trim() === eanEscaneado.value.trim()
 })
@@ -800,15 +806,18 @@ watch(cajaResult, (val) => {
 // P+X validation ranges por tipo de producto y cliente
 const pxRangos = {
   'piña': {
-    'LIDL':         { min: 8, max: 9 },
-    'ALDI':         { min: 8, max: 9 },
-    'DELMONTE':     { min: 8, max: 9 },
-    'MERCADONA SA': { min: 5, max: 5 },
-    'Maskom':       { min: 8, max: 9 }
+    'LIDL':                            { min: 8, max: 9 },
+    'ALDI':                            { min: 8, max: 9 },
+    'DELMONTE':                        { min: 8, max: 9 },
+    'MERCADONA SA':                    { min: 5, max: 5 },
+    'MASKOMO SL':                      { min: 8, max: 9 },
+    'ALABAU FRUTAS Y VERDURAS, S.L.':  { min: 9, max: 9 }
   },
   'coco': {
     'DELMONTE':     { min: 7, max: 10 },
-    'ALDI':         { min: 9, max: 10 }
+    'ALDI':         { min: 9, max: 10 },
+    'MASKOMO SL':   { min: 9, max: 10 },
+    'GUFRESCO':     { min: 10, max: 10 }
   }
 }
 
@@ -1202,6 +1211,15 @@ const compararBoteConOrden = (data) => {
       const pxLeido = Number(data.validacion_px.px_leido)
       if (pxLeido !== verifyParams.px) {
         errores.push(`P+X no coincide. Etiqueta: P+${pxLeido} · Esperado: P+${verifyParams.px}`)
+      }
+    }
+
+    // GUFRESCO: el lote en la etiqueta debe ser el día juliano de hoy
+    if (data.cliente === 'GUFRESCO') {
+      const loteEsperadoHoy = String(diaJuliano.value)
+      const loteLeido = String(data.lote || '').replace(/\s+/g, '').trim()
+      if (loteLeido !== loteEsperadoHoy) {
+        errores.push(`Lote no es del día de hoy. Etiqueta: ${data.lote || '—'} · Día juliano hoy: ${loteEsperadoHoy}`)
       }
     }
   }
