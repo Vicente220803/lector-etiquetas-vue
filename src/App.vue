@@ -940,13 +940,17 @@ const procesarRespuestaCaja = (data) => {
   if (data.bloqueo_ia || data.cliente === 'REINTENTAR') {
     errores.push('La IA no pudo procesar la imagen de la caja. Vuelve a hacer la foto.')
   } else {
-    // Comparar cliente (FLEXIBLE: uno contiene al otro)
-    // Ej: caja dice "MERCADONA", orden dice "MERCADONA SA" → coinciden
+    // Comparar cliente FLEXIBLE — acepta match contra:
+    //  · cliente URL  (caso normal)
+    //  · cliente del bote ya verificado (caso alias: caja dice DELMONTE pero la orden es CONSUM
+    //    porque el bote ya bridge-eó vía cliente_alias en compararBoteConOrden)
     const clienteCaja = (data.cliente || '').toUpperCase().trim()
     const clienteEsperado = (verifyParams.cliente || '').toUpperCase().trim()
+    const clienteBoteVerified = (verifyResult.value?.datos?.cliente || '').toUpperCase().trim()
+    const matchea = (a, b) => a && b && (a.includes(b) || b.includes(a))
     if (!clienteCaja || clienteCaja === 'OTROS') {
       errores.push('No se detectó cliente en la caja')
-    } else if (!clienteCaja.includes(clienteEsperado) && !clienteEsperado.includes(clienteCaja)) {
+    } else if (!matchea(clienteCaja, clienteEsperado) && !matchea(clienteCaja, clienteBoteVerified)) {
       errores.push(`Cliente caja no coincide. Caja: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
     }
 
@@ -1147,6 +1151,7 @@ const aplicarDatosOCR = (data) => {
         type: 'bote-analyzed',
         data: JSON.parse(JSON.stringify({
           cliente: data.cliente,
+          cliente_alias: data.cliente_alias || null,
           producto_db: data.producto_db,
           ean: data.ean,
           lote: data.lote,
@@ -1180,12 +1185,15 @@ const compararBoteConOrden = (data) => {
   if (data.bloqueo_ia || data.cliente === 'REINTENTAR') {
     errores.push('La IA no pudo procesar la imagen. Vuelve a hacer la foto.')
   } else {
-    // Comparar cliente FLEXIBLE (uno contiene al otro)
-    // Ej: OCR detecta "ALDI", la orden en Hoja de Fabricación dice "ALDI SAGUNTO" → coinciden
+    // Comparar cliente FLEXIBLE (uno contiene al otro) — acepta también cliente_alias
+    // Ej1: OCR detecta "ALDI", la orden dice "ALDI SAGUNTO" → coinciden (substring)
+    // Ej2: OCR detecta "DELMONTE" con alias "CONSUM", la orden dice "CONSUM" → coinciden (alias)
     const clienteBote = (data.cliente || '').toUpperCase().trim()
+    const aliasBote = (data.cliente_alias || '').toUpperCase().trim()
     const clienteEsperado = (verifyParams.cliente || '').toUpperCase().trim()
-    if (clienteBote && clienteEsperado) {
-      if (!clienteBote.includes(clienteEsperado) && !clienteEsperado.includes(clienteBote)) {
+    const matchea = (a, b) => a && b && (a.includes(b) || b.includes(a))
+    if (clienteEsperado) {
+      if (!matchea(clienteBote, clienteEsperado) && !matchea(aliasBote, clienteEsperado)) {
         errores.push(`Cliente no coincide. Etiqueta: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
       }
     }
