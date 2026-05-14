@@ -779,8 +779,27 @@ const validacionPx = ref(null)
 // Last saved entry
 const ultimoRegistro = ref(null)
 
-// --- LISTS (Responsable names) ---
+// --- LISTS ---
+// Operarios cargados desde Supabase tabla 'operarios' (activo=true).
+// Fallback hardcoded por si la query falla (sin conexión, RLS bloqueado, etc.)
 const listaResponsables = ref(['Aurora', 'Mónica', 'Jorge Steven', 'Carlos', 'Carla'])
+
+const cargarOperarios = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('operarios')
+      .select('nombre')
+      .eq('activo', true)
+      .order('nombre', { ascending: true })
+    if (error) throw error
+    if (data && data.length > 0) {
+      listaResponsables.value = data.map(o => o.nombre)
+    }
+  } catch (e) {
+    console.warn('[OPERARIOS] No se pudo cargar la lista desde Supabase, usando fallback:', e)
+  }
+}
+cargarOperarios()
 
 // --- VERIFY MODE: operario que está verificando (se pregunta cada vez que se abre el iframe) ---
 const operarioVerificacion = ref('')
