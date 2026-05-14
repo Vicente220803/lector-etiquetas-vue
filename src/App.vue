@@ -56,7 +56,10 @@
             class="ean-scan-input"
             autofocus
           />
-          <p v-if="eanEscaneado && eanCoincide === false" class="verify-error-msg">⚠️ EAN no coincide. Vuelve a escanear.</p>
+          <template v-if="eanEscaneado && eanCoincide === false">
+            <p class="verify-error-msg">⚠️ EAN no coincide. Vuelve a escanear.</p>
+            <button @click="limpiarEan" class="btn-reintentar" style="margin-top:8px;">↻ Limpiar y reintentar</button>
+          </template>
           <p v-else class="verify-hint">📲 Pasa el lector sobre el código de barras</p>
         </template>
 
@@ -590,6 +593,16 @@ const handleParentMessage = (event) => {
     matchStatus.value = 'already-verified'
     matchMensaje.value = `Esta orden (${msg.orderId}) ya fue verificada anteriormente`
   }
+}
+
+// Limpia solo el campo de escaneo EAN y refocaliza el input para volver a escanear.
+// Usado cuando el operario se equivoca al pasar el lector y necesita reintentar
+// sin volver a hacer la foto.
+const limpiarEan = () => {
+  eanEscaneado.value = ''
+  setTimeout(() => {
+    eanInputRef.value?.focus()
+  }, 50)
 }
 
 // Reintentar verificación (limpia resultado y vuelve a abrir cámara)
