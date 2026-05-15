@@ -25,6 +25,16 @@
         </svg>
         Capturar Imagen
       </button>
+      <button @click="fileInput?.click()" class="upload-button" type="button">
+        📁 Subir archivo desde el PC
+      </button>
+      <input
+        ref="fileInput"
+        type="file"
+        accept="image/*"
+        @change="handleFileSelected"
+        style="display:none"
+      />
     </div>
   </div>
 </template>
@@ -39,7 +49,17 @@ const props = defineProps({
 const emit = defineEmits(['imageCaptured', 'closeCamera'])
 
 const video = ref(null)
+const fileInput = ref(null)
 let stream = null
+
+const handleFileSelected = (event) => {
+  const file = event.target.files?.[0]
+  if (!file) return
+  console.log('✅ Imagen subida desde archivo:', file.name, file.size, 'bytes')
+  emit('imageCaptured', file)
+  stopCamera()
+  event.target.value = ''
+}
 
 const startCamera = async () => {
   try {
@@ -256,5 +276,21 @@ video {
   justify-content: center;
   gap: 12px;
   box-shadow: 0 4px 15px rgba(72, 187, 120, 0.3);
+}
+
+.upload-button {
+  margin-top: 10px;
+  background: transparent;
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 12px 20px;
+  font-size: 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.upload-button:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 </style>

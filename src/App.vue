@@ -1184,7 +1184,7 @@ const enviarAOCR = async (file) => {
 
 const aplicarDatosOCR = (data) => {
   formData.value = {
-    cliente: data.cliente || '',
+    cliente: data.cliente_alias || data.cliente || '',
     producto_db: data.producto_db || '',
     origen: data.origen || '',
     ean: data.ean || '',
