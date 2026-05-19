@@ -1227,7 +1227,7 @@ const aplicarDatosOCR = (data) => {
         source: 'lector-etiquetas',
         type: 'bote-analyzed',
         data: JSON.parse(JSON.stringify({
-          cliente: data.cliente,
+          cliente: data.cliente_alias || data.cliente,
           cliente_alias: data.cliente_alias || null,
           producto_db: data.producto_db,
           ean: data.ean,
