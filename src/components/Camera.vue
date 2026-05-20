@@ -1,7 +1,7 @@
 <template>
   <div v-if="showCamera" class="camera-container">
     <div class="camera-header">
-      <h3>Vista Previa de Cámara</h3>
+      <h3>{{ title }}</h3>
       <button @click="$emit('closeCamera')" class="close-camera-button">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -43,7 +43,11 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
-  showCamera: Boolean
+  showCamera: Boolean,
+  title: {
+    type: String,
+    default: 'FOTO BOTE'
+  }
 })
 
 const emit = defineEmits(['imageCaptured', 'closeCamera'])

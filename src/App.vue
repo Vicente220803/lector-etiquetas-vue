@@ -474,6 +474,7 @@
     <div v-if="showCamera" class="camera-modal">
       <Camera
         :show-camera="showCamera"
+        :title="pidiendoCaja ? 'FOTO CAJA' : 'FOTO BOTE'"
         @image-captured="handleImageCaptured"
         @close-camera="closeCamera"
       />
