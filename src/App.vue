@@ -1326,36 +1326,44 @@ const compararBoteConOrden = (data) => {
       }
     }
 
-    if (verifyParams.px !== null && data.validacion_px) {
+    // En MODO NORMAL (etiqueta del día actual) usamos pxLeido tal como lo
+    // calcula n8n a partir de fechas leídas en la etiqueta.
+    if (!verifyParams.fechaProduccion
+        && verifyParams.px !== null
+        && data.validacion_px) {
       const pxLeido = Number(data.validacion_px.px_leido)
       if (pxLeido !== verifyParams.px) {
         errores.push(`P+X no coincide. Etiqueta: P+${pxLeido} · Esperado: P+${verifyParams.px}`)
       }
     }
 
-    // Modo "verificar etiqueta otro día": fecha_envasado de la etiqueta debe
-    // ser EXACTAMENTE la fecha_produccion de la orden seleccionada por el operario.
+    // En MODO "verificar etiqueta otro día" la fecha_produccion de la URL es
+    // la fuente de verdad. Recalculamos P+X como (caducidad OCR − fecha_produccion)
+    // porque algunas etiquetas (p. ej. Del Monte coco) no llevan fecha_envasado
+    // impresa, y entonces n8n rellena con la fecha de hoy y px_leido sale mal.
     if (verifyParams.fechaProduccion) {
-      const esperada = parseFechaFlexible(verifyParams.fechaProduccion)
-      const leida = parseFechaFlexible(data.fecha_envasado)
-      if (esperada && leida) {
-        if (esperada.getTime() !== leida.getTime()) {
-          errores.push(`Fecha envasado no coincide. Etiqueta: ${data.fecha_envasado} · Esperado: ${verifyParams.fechaProduccion}`)
+      const env = parseFechaFlexible(verifyParams.fechaProduccion)
+      const cad = parseFechaFlexible(data.fecha_caducidad)
+
+      if (!cad) {
+        errores.push(`No se pudo leer la fecha de caducidad de la etiqueta (${data.fecha_caducidad || '—'}).`)
+      } else if (env && verifyParams.px !== null) {
+        const pxReal = Math.round((cad - env) / 86400000)
+        if (pxReal !== verifyParams.px) {
+          errores.push(`P+X no coincide. Caducidad (${data.fecha_caducidad}) − producción (${verifyParams.fechaProduccion}) = P+${pxReal} · Esperado: P+${verifyParams.px}`)
         }
-      } else {
-        errores.push(`No se pudo leer la fecha de envasado de la etiqueta (${data.fecha_envasado || '—'}).`)
       }
 
-      // Consistencia interna de la etiqueta: caducidad - envasado == P+X
-      if (data.validacion_px && data.fecha_envasado && data.fecha_caducidad) {
-        const env = parseFechaFlexible(data.fecha_envasado)
-        const cad = parseFechaFlexible(data.fecha_caducidad)
-        const pxLeido = Number(data.validacion_px.px_leido)
-        if (env && cad && Number.isFinite(pxLeido)) {
-          const diffDias = Math.round((cad - env) / 86400000)
-          if (diffDias !== pxLeido) {
-            errores.push(`Etiqueta inconsistente: P+X dice ${pxLeido} pero hay ${diffDias} días entre envasado (${data.fecha_envasado}) y caducidad (${data.fecha_caducidad}).`)
-          }
+      // Si el OCR devuelve fecha_envasado y NO es la de hoy (fallback típico
+      // de n8n cuando no está impresa) comprobamos que coincide con
+      // fecha_produccion. Si es la de hoy lo damos por ruido y no validamos.
+      const ocrEnv = parseFechaFlexible(data.fecha_envasado)
+      if (ocrEnv && env) {
+        const hoy = new Date()
+        hoy.setHours(0, 0, 0, 0)
+        const esFallbackHoy = ocrEnv.getTime() === hoy.getTime()
+        if (!esFallbackHoy && ocrEnv.getTime() !== env.getTime()) {
+          errores.push(`Fecha envasado no coincide. Etiqueta: ${data.fecha_envasado} · Esperado: ${verifyParams.fechaProduccion}`)
         }
       }
     }
