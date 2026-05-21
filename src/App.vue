@@ -685,6 +685,10 @@ const enviarResultadoVerificacion = async () => {
   }
 
   // 1. Guardar en Supabase audit_logs
+  // fecha_produccion: si la URL trae fecha_produccion (etiqueta antigua) usamos esa;
+  // si no, intentamos derivarla del fecha_envasado leído por el OCR.
+  const fechaProduccionISO = verifyParams.fechaProduccion
+    || toIsoDate(parseFechaFlexible(datos.fecha_envasado))
   try {
     await supabase.from('audit_logs').insert([{
       timestamp,
@@ -693,6 +697,7 @@ const enviarResultadoVerificacion = async () => {
       px_usuario: payload.px_usuario,
       estado: 'VERIFICADA',
       detalles: payload,
+      fecha_produccion: fechaProduccionISO,
       navegador: navigator.userAgent.substring(0, 100)
     }])
   } catch (e) {
@@ -826,7 +831,8 @@ const fechaHoyFormato = computed(() => {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 })
 
-// Parsea fechas en DD/MM/YYYY (OCR) o YYYY-MM-DD (URL). Devuelve Date o null.
+// Parsea fechas en varios formatos comunes en este proyecto:
+// YYYY-MM-DD (URL), DD/MM/YYYY (OCR), DD.MM.YYYY o DD.MM.YY (form normalizado).
 function parseFechaFlexible(str) {
   if (!str) return null
   const s = String(str).trim()
@@ -838,7 +844,21 @@ function parseFechaFlexible(str) {
     const [d, m, y] = s.split('/').map(Number)
     return new Date(y, m - 1, d)
   }
+  if (/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(s)) {
+    const [d, m, y] = s.split('.').map(Number)
+    return new Date(y, m - 1, d)
+  }
+  if (/^\d{1,2}\.\d{1,2}\.\d{2}$/.test(s)) {
+    const [d, m, yy] = s.split('.').map(Number)
+    return new Date(2000 + yy, m - 1, d)
+  }
   return null
+}
+
+// Convierte un Date a YYYY-MM-DD para columnas DATE de Postgres.
+function toIsoDate(d) {
+  if (!d || !(d instanceof Date) || isNaN(d.getTime())) return null
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 const diaJuliano = computed(() => {
@@ -1471,6 +1491,7 @@ const guardarRegistro = async () => {
         px_usuario: datosEtiqueta.px_usuario,
         estado: 'GUARDADA',
         detalles: datosEtiqueta,
+        fecha_produccion: toIsoDate(parseFechaFlexible(datosEtiqueta.fecha_envasado)),
         navegador: navigator.userAgent.substring(0, 100)
       }])
 
