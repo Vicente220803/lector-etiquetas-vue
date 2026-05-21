@@ -1371,6 +1371,14 @@ const compararBoteConOrden = (data) => {
         errores.push(`No se pudo leer la fecha de caducidad de la etiqueta (${data.fecha_caducidad || '—'}).`)
       } else if (env && verifyParams.px !== null) {
         const pxReal = Math.round((cad - env) / 86400000)
+        // Sobrescribimos px_leido de n8n con el calculado por nosotros para que
+        // la pantalla VERIFICADO, el payload de email y audit_logs muestren el
+        // P+X correcto (n8n se equivoca cuando la etiqueta no trae envasado).
+        if (data.validacion_px) {
+          data.validacion_px.px_leido = pxReal
+        } else {
+          data.validacion_px = { px_leido: pxReal }
+        }
         if (pxReal !== verifyParams.px) {
           errores.push(`P+X no coincide. Caducidad (${data.fecha_caducidad}) − producción (${verifyParams.fechaProduccion}) = P+${pxReal} · Esperado: P+${verifyParams.px}`)
         }
