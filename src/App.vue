@@ -861,6 +861,26 @@ function toIsoDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+// Parsea una fecha que puede venir sin año (ej. "25/05" en etiquetas de
+// Del Monte coco). Si no trae año, infiere el de la fecha de referencia,
+// pasando a año+1 si el resultado caería antes (caso paso de diciembre a
+// enero). Para formatos con año delega en parseFechaFlexible.
+function parseFechaConRef(str, refDate) {
+  if (!str) return null
+  const s = String(str).trim()
+  const sinAno = s.match(/^(\d{1,2})[\/.\-](\d{1,2})$/)
+  if (sinAno && refDate instanceof Date && !isNaN(refDate.getTime())) {
+    const day = Number(sinAno[1])
+    const mes = Number(sinAno[2])
+    let d = new Date(refDate.getFullYear(), mes - 1, day)
+    if (d.getTime() < refDate.getTime()) {
+      d = new Date(refDate.getFullYear() + 1, mes - 1, day)
+    }
+    return d
+  }
+  return parseFechaFlexible(s)
+}
+
 const diaJuliano = computed(() => {
   // En modo "verificar etiqueta otro día" la referencia es la fecha_produccion
   // de la orden (no la fecha del navegador), para que las validaciones de lote
@@ -1343,7 +1363,9 @@ const compararBoteConOrden = (data) => {
     // impresa, y entonces n8n rellena con la fecha de hoy y px_leido sale mal.
     if (verifyParams.fechaProduccion) {
       const env = parseFechaFlexible(verifyParams.fechaProduccion)
-      const cad = parseFechaFlexible(data.fecha_caducidad)
+      // Caducidad puede venir sin año (ej. "25/05" en Del Monte coco). En ese
+      // caso inferimos el año a partir de fecha_produccion.
+      const cad = parseFechaConRef(data.fecha_caducidad, env)
 
       if (!cad) {
         errores.push(`No se pudo leer la fecha de caducidad de la etiqueta (${data.fecha_caducidad || '—'}).`)
