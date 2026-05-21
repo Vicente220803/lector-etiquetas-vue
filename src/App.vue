@@ -1074,13 +1074,18 @@ const procesarRespuestaCaja = (data) => {
       errores.push(`Cliente caja no coincide. Caja: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
     }
 
-    // Comparar lote de la caja con el del bote (si ambos lo tienen)
-    // Esto detecta cajas de OTRAS órdenes con misma fecha pero distinto lote
+    // Comparar lote de la caja con el del bote (si ambos lo tienen).
+    // El lote del bote incluye un identificador de unidad/hora al final
+    // (p.ej. bote = "002141121300", caja = "002141"), por eso aceptamos
+    // que uno sea prefijo del otro en lugar de exigir igualdad estricta.
     const loteBote = verifyResult.value?.datos?.lote
     const loteCajaRaw = data.datos_extraidos?.lote
     if (loteBote && loteCajaRaw && loteCajaRaw !== 'No detectado') {
       const normLote = (l) => String(l || '').replace(/\s+/g, '').trim()
-      if (normLote(loteCajaRaw) !== normLote(loteBote)) {
+      const a = normLote(loteCajaRaw)
+      const b = normLote(loteBote)
+      const coincide = a && b && (a === b || a.startsWith(b) || b.startsWith(a))
+      if (!coincide) {
         errores.push(`Lote caja no coincide con el bote. Caja: ${loteCajaRaw} · Bote: ${loteBote}`)
       }
     }
@@ -1091,6 +1096,9 @@ const procesarRespuestaCaja = (data) => {
       const normalizar = (f) => {
         if (!f) return ''
         let s = String(f).replace(/[.\-]/g, '/').trim()
+        // yyyy/mm/dd (ISO normalizado) → dd/mm/yyyy
+        const mIso = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/)
+        if (mIso) return `${mIso[3].padStart(2, '0')}/${mIso[2].padStart(2, '0')}/${mIso[1]}`
         // dd/mm/yy → dd/mm/20yy (asumimos siglo XXI)
         const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/)
         if (m2) return `${m2[1].padStart(2, '0')}/${m2[2].padStart(2, '0')}/20${m2[3]}`
