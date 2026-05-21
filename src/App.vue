@@ -510,6 +510,7 @@ const verifyParams = (() => {
     cliente: params.get('cliente') || '',
     px: params.get('px') ? Number(params.get('px')) : null,
     fechaCad: params.get('fecha_cad') || '',
+    fechaProduccion: params.get('fecha_produccion') || '',
     orderId: params.get('order_id') || ''
   }
 })()
@@ -825,8 +826,29 @@ const fechaHoyFormato = computed(() => {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 })
 
+// Parsea fechas en DD/MM/YYYY (OCR) o YYYY-MM-DD (URL). Devuelve Date o null.
+function parseFechaFlexible(str) {
+  if (!str) return null
+  const s = String(str).trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+    const [d, m, y] = s.split('/').map(Number)
+    return new Date(y, m - 1, d)
+  }
+  return null
+}
+
 const diaJuliano = computed(() => {
-  const d = new Date()
+  // En modo "verificar etiqueta otro día" la referencia es la fecha_produccion
+  // de la orden (no la fecha del navegador), para que las validaciones de lote
+  // GUFRESCO/Coco se hagan contra el día histórico de fabricación.
+  const dRef = verifyParams && verifyParams.fechaProduccion
+    ? parseFechaFlexible(verifyParams.fechaProduccion)
+    : null
+  const d = dRef || new Date()
   const start = new Date(d.getFullYear(), 0, 0)
   const diff = d - start
   return Math.floor(diff / 86400000)
@@ -1283,12 +1305,44 @@ const compararBoteConOrden = (data) => {
       }
     }
 
-    // GUFRESCO: el lote en la etiqueta debe ser el día juliano de hoy
+    // Modo "verificar etiqueta otro día": fecha_envasado de la etiqueta debe
+    // ser EXACTAMENTE la fecha_produccion de la orden seleccionada por el operario.
+    if (verifyParams.fechaProduccion) {
+      const esperada = parseFechaFlexible(verifyParams.fechaProduccion)
+      const leida = parseFechaFlexible(data.fecha_envasado)
+      if (esperada && leida) {
+        if (esperada.getTime() !== leida.getTime()) {
+          errores.push(`Fecha envasado no coincide. Etiqueta: ${data.fecha_envasado} · Esperado: ${verifyParams.fechaProduccion}`)
+        }
+      } else {
+        errores.push(`No se pudo leer la fecha de envasado de la etiqueta (${data.fecha_envasado || '—'}).`)
+      }
+
+      // Consistencia interna de la etiqueta: caducidad - envasado == P+X
+      if (data.validacion_px && data.fecha_envasado && data.fecha_caducidad) {
+        const env = parseFechaFlexible(data.fecha_envasado)
+        const cad = parseFechaFlexible(data.fecha_caducidad)
+        const pxLeido = Number(data.validacion_px.px_leido)
+        if (env && cad && Number.isFinite(pxLeido)) {
+          const diffDias = Math.round((cad - env) / 86400000)
+          if (diffDias !== pxLeido) {
+            errores.push(`Etiqueta inconsistente: P+X dice ${pxLeido} pero hay ${diffDias} días entre envasado (${data.fecha_envasado}) y caducidad (${data.fecha_caducidad}).`)
+          }
+        }
+      }
+    }
+
+    // GUFRESCO: el lote en la etiqueta debe ser el día juliano de la fecha de
+    // producción de la orden (hoy en flujo normal; la fecha de la orden en
+    // modo "verificar etiqueta otro día").
     if (data.cliente === 'GUFRESCO') {
-      const loteEsperadoHoy = String(diaJuliano.value)
+      const loteEsperado = String(diaJuliano.value)
       const loteLeido = String(data.lote || '').replace(/\s+/g, '').trim()
-      if (loteLeido !== loteEsperadoHoy) {
-        errores.push(`Lote no es del día de hoy. Etiqueta: ${data.lote || '—'} · Día juliano hoy: ${loteEsperadoHoy}`)
+      if (loteLeido !== loteEsperado) {
+        const refTxt = verifyParams.fechaProduccion
+          ? `día de la orden (${verifyParams.fechaProduccion})`
+          : 'día de hoy'
+        errores.push(`Lote no coincide con el ${refTxt}. Etiqueta: ${data.lote || '—'} · Día juliano esperado: ${loteEsperado}`)
       }
     }
   }
