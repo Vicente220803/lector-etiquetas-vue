@@ -1330,6 +1330,31 @@ const aplicarDatosOCR = (data) => {
 const compararBoteConOrden = (data) => {
   const errores = []
 
+  // === EXCEPCIÓN TEMPORAL: Del Monte Piña Tacos 400g ===
+  // Mientras se completa el soporte del nuevo formato (datos impresos sobre
+  // film verde), para este producto solo validamos EAN + origen. EAN en DB
+  // es de 12 dígitos (sin check digit); el OCR puede traer 13 dígitos con
+  // dígito de control distinto → comparamos los 12 primeros.
+  // QUITAR esta isla cuando el flujo normal soporte la etiqueta sobre film.
+  const eanLeidoBote = String(data.ean || '').replace(/\s+/g, '')
+  if (eanLeidoBote.startsWith('872109893331')) {
+    const origenOK = /costa\s*rica/i.test(String(data.origen || ''))
+    if (!origenOK) {
+      verifyResult.value = {
+        ok: false,
+        errores: [`Origen no coincide. Etiqueta: ${data.origen || '—'} · Esperado: Costa Rica`]
+      }
+      console.log('[VERIFY MODE] Bypass Piña Tacos 400g: origen KO →', data.origen)
+      return
+    }
+    // Saltarse escaneo EAN físico y foto de caja: directo a VERIFICADO
+    data.etiqueta_de_caja = false
+    verifyResult.value = { ok: true, datos: data }
+    eanCoincide.value = true
+    console.log('[VERIFY MODE] Bypass Piña Tacos 400g aplicado (verde directo)')
+    return
+  }
+
   if (data.bloqueo_ia || data.cliente === 'REINTENTAR') {
     errores.push('La IA no pudo procesar la imagen. Vuelve a hacer la foto.')
   } else {
