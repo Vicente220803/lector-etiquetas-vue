@@ -63,6 +63,34 @@
           <p v-else class="verify-hint">📲 Pasa el lector sobre el código de barras</p>
         </template>
 
+        <!-- Estado tacos-2a: culo OK, esperando FOTO FRONTAL (solo flujo tacos) -->
+        <template v-else-if="verifyResult.ok && eanCoincide === true && verifyParams?.flujoTacos && !frontalResult">
+          <div class="verify-icon">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="14" rx="2" stroke="#1a365d" stroke-width="2"/><circle cx="12" cy="11" r="3" stroke="#1a365d" stroke-width="2"/></svg>
+          </div>
+          <h2 class="verify-title">📸 AHORA EL FRONTAL</h2>
+          <p v-if="isProcessing" class="verify-subtitle">⏳ Analizando frontal, espera...</p>
+          <p v-else class="verify-subtitle">Haz la foto del FRONTAL del bote (etiqueta verde con "Piña troceada")</p>
+          <div class="verify-info verify-info-ok">
+            <div><b>Culo verificado:</b> ✅</div>
+            <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
+            <div><b>EAN:</b> {{ verifyResult.datos.ean }}</div>
+          </div>
+        </template>
+
+        <!-- Estado tacos-2b: frontal KO -->
+        <template v-else-if="verifyResult.ok && eanCoincide === true && verifyParams?.flujoTacos && frontalResult && !frontalResult.ok">
+          <div class="verify-icon verify-icon-ko">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#e53e3e" stroke-width="2"/><path d="M9 9l6 6M15 9l-6 6" stroke="#e53e3e" stroke-width="2.5" stroke-linecap="round"/></svg>
+          </div>
+          <h2 class="verify-title verify-title-ko">FRONTAL NO COINCIDE</h2>
+          <p class="verify-subtitle">La etiqueta frontal no coincide con la orden</p>
+          <div class="verify-info verify-info-ko">
+            <div v-for="(err, i) in frontalResult.errores" :key="i" class="verify-error">⚠️ {{ err }}</div>
+          </div>
+          <button @click="reintentarFrontal" class="btn-reintentar">↻ Reintentar foto frontal</button>
+        </template>
+
         <!-- Estado 3a: Bote OK + EAN OK, esperando foto de la CAJA -->
         <template v-else-if="verifyResult.ok && eanCoincide === true && verifyResult.datos?.etiqueta_de_caja === true && !cajaResult">
           <div class="verify-icon">
@@ -102,6 +130,12 @@
             <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
             <div><b>EAN:</b> {{ verifyResult.datos.ean }}</div>
             <div><b>P+X:</b> {{ verifyResult.datos.validacion_px?.px_leido }}</div>
+          </div>
+          <div v-if="frontalResult?.ok && frontalResult.datos" class="verify-info verify-info-ok" style="margin-top:10px;">
+            <div style="font-weight:700;margin-bottom:6px;">🏷️ Datos del frontal:</div>
+            <div v-if="frontalResult.datos.producto"><b>Producto:</b> {{ frontalResult.datos.producto }}</div>
+            <div v-if="frontalResult.datos.fecha_caducidad"><b>Caducidad:</b> {{ frontalResult.datos.fecha_caducidad }}</div>
+            <div v-if="frontalResult.datos.lote"><b>Lote:</b> {{ frontalResult.datos.lote }}</div>
           </div>
           <div v-if="cajaResult?.ok && cajaResult.datos?.datos_extraidos" class="verify-info verify-info-ok" style="margin-top:10px;">
             <div style="font-weight:700;margin-bottom:6px;">📦 Datos de la caja:</div>
@@ -474,7 +508,7 @@
     <div v-if="showCamera" class="camera-modal">
       <Camera
         :show-camera="showCamera"
-        :title="pidiendoCaja ? 'FOTO CAJA' : 'FOTO BOTE'"
+        :title="pidiendoCaja ? 'FOTO CAJA' : (pidiendoFrontal ? 'FOTO FRONTAL' : 'FOTO BOTE')"
         @image-captured="handleImageCaptured"
         @close-camera="closeCamera"
       />
@@ -491,6 +525,7 @@ import { jsPDF } from 'jspdf'
 const webhookUrl = 'https://surexportlevante.app.n8n.cloud/webhook/65eeb484-7bfd-48fe-b09d-594e2204b6bf'
 const webhookCocoUrl = 'https://surexportlevante.app.n8n.cloud/webhook/842d2503-5f47-41e2-8388-17cbbdbc5a09'
 const webhookCajaUrl = 'https://surexportlevante.app.n8n.cloud/webhook/d8a44c23-fed4-499b-8546-bea698e04cd1'
+const webhookTacosFrontalUrl = 'https://surexportlevante.app.n8n.cloud/webhook/tacos-frontal'
 const webhookInformeTurnoUrl = 'https://surexportlevante.app.n8n.cloud/webhook/6e531e4e-2a41-46d6-ae7e-7a2a6e8bb578'
 const webhookEmailEtiquetaUrl = 'https://surexportlevante.app.n8n.cloud/webhook/2306cff7-de6a-41c0-a05d-b97f12b43eb8'
 
@@ -511,6 +546,7 @@ const verifyParams = (() => {
     px: params.get('px') ? Number(params.get('px')) : null,
     fechaCad: params.get('fecha_cad') || '',
     fechaProduccion: params.get('fecha_produccion') || '',
+    flujoTacos: params.get('flujo_tacos') === 'true',
     orderId: params.get('order_id') || ''
   }
 })()
@@ -519,6 +555,10 @@ const verifyResult = ref(null) // null | { ok: true, datos } | { ok: false, erro
 const cajaResult = ref(null)   // null | { ok: true, datos } | { ok: false, errores: [...] }
 const pidiendoCaja = ref(false) // true cuando estamos esperando la foto de la caja
 const fileCaja = ref(null)     // File object de la foto de caja (para guardar/enviar)
+// Flujo tacos: foto 2 del bote (FRONTAL). Solo se usa cuando verifyParams.flujoTacos === true
+const frontalResult = ref(null)   // null | { ok: true, datos } | { ok: false, errores: [...] }
+const pidiendoFrontal = ref(false) // true cuando esperamos la foto del frontal
+const fileFrontal = ref(null)     // File object de la foto del frontal
 const eanInputRef = ref(null)
 // Auto mode: estado de búsqueda de orden tras OCR del bote
 const matchStatus = ref(null)  // null | 'waiting' | 'no-match' | 'already-verified'
@@ -617,6 +657,9 @@ const reintentarVerificacion = () => {
   cajaResult.value = null
   pidiendoCaja.value = false
   fileCaja.value = null
+  frontalResult.value = null
+  pidiendoFrontal.value = false
+  fileFrontal.value = null
   matchStatus.value = null
   matchMensaje.value = ''
   boteDataPending.value = null
@@ -646,28 +689,34 @@ const resultadoEnviado = ref(false)
 const enviarResultadoVerificacion = async () => {
   if (resultadoEnviado.value) return
   if (!verifyMode.value || !verifyResult.value?.ok || eanCoincide.value !== true) return
+  // Flujo tacos: exigir que el frontal también esté verificado OK antes de cerrar
+  if (verifyParams.flujoTacos && !frontalResult.value?.ok) return
   // Si el producto requiere caja, exigir que la caja también esté verificada OK
   if (verifyResult.value.datos?.etiqueta_de_caja === true && !cajaResult.value?.ok) return
   resultadoEnviado.value = true
 
+  // En flujo tacos, los datos vienen partidos: cliente/EAN/origen del culo,
+  // y producto/caducidad/lote del frontal. Fusionamos antes de armar el payload.
   const datos = verifyResult.value.datos
+  const datosFrontal = frontalResult.value?.datos || null
   const datosCaja = cajaResult.value?.datos || null
   const timestamp = new Date().toISOString()
   const horaActual = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
 
   // Convertir las fotos a base64 para incluirlas en el email
   const fotoBote = fileToUpload.value ? await fileToBase64(fileToUpload.value) : null
+  const fotoFrontal = fileFrontal.value ? await fileToBase64(fileFrontal.value) : null
   const fotoCaja = fileCaja.value ? await fileToBase64(fileCaja.value) : null
 
   const payload = {
     cliente: datos.cliente,
-    producto_db: datos.producto_db,
+    producto_db: datosFrontal?.producto || datos.producto_db,
     origen: datos.origen,
     ean: datos.ean,
-    lote: datos.lote,
+    lote: datosFrontal?.lote || datos.lote,
     codigo_r: datos.codigo_r,
     fecha_envasado: datos.fecha_envasado,
-    fecha_caducidad: datos.fecha_caducidad,
+    fecha_caducidad: datosFrontal?.fecha_caducidad || datos.fecha_caducidad,
     precio_kg: datos.precio_kg,
     peso_neto: datos.peso_neto,
     importe: datos.importe,
@@ -676,6 +725,14 @@ const enviarResultadoVerificacion = async () => {
     hora_guardado: horaActual,
     order_id: verifyParams.orderId,
     foto_base64: fotoBote,
+    frontal: datosFrontal ? {
+      producto: datosFrontal.producto,
+      fecha_caducidad: datosFrontal.fecha_caducidad,
+      lote: datosFrontal.lote,
+      linea_produccion: datosFrontal.linea_produccion,
+      dia_juliano_lote: datosFrontal.dia_juliano_lote,
+      foto_base64: fotoFrontal
+    } : null,
     caja: datosCaja ? {
       cliente: datosCaja.cliente,
       fecha_caducidad: datosCaja.fecha_caducidad,
@@ -912,10 +969,18 @@ const eanCoincide = computed(() => {
 })
 
 // En modo verificación, cuando EAN coincide:
-// - Si el producto requiere etiqueta de caja → entrar en fase caja (abrir cámara otra vez)
+// - Si flujoTacos activo y todavía no tenemos frontalResult → pedir foto frontal
+// - Si el producto requiere etiqueta de caja → entrar en fase caja
 // - Si no → enviar resultado directamente
 watch(eanCoincide, (val) => {
   if (!verifyMode.value || val !== true || !verifyResult.value?.ok) return
+
+  // Flujo tacos: primero pedimos el frontal (foto 2 del bote)
+  if (verifyParams.flujoTacos && !frontalResult.value?.ok) {
+    pidiendoFrontal.value = true
+    setTimeout(() => { showCamera.value = true }, 600)
+    return
+  }
 
   if (verifyResult.value.datos?.etiqueta_de_caja === true) {
     // Activar fase caja y abrir cámara
@@ -923,6 +988,18 @@ watch(eanCoincide, (val) => {
     setTimeout(() => { showCamera.value = true }, 600)
   } else {
     // No requiere caja → enviar resultado directamente
+    enviarResultadoVerificacion()
+  }
+})
+
+// Flujo tacos: cuando el frontal termina OK → pasar a la fase caja (o cerrar si no hay caja)
+watch(frontalResult, (val) => {
+  if (!verifyMode.value || !val?.ok) return
+  pidiendoFrontal.value = false
+  if (verifyResult.value?.datos?.etiqueta_de_caja === true) {
+    pidiendoCaja.value = true
+    setTimeout(() => { showCamera.value = true }, 600)
+  } else {
     enviarResultadoVerificacion()
   }
 })
@@ -1019,9 +1096,11 @@ const handleImageCaptured = (file) => {
 
   // Guardar el File en la ref correcta según la fase
   if (pidiendoCaja.value) {
-    fileCaja.value = file  // foto de la caja (no sobreescribe la del bote)
+    fileCaja.value = file  // foto de la caja
+  } else if (pidiendoFrontal.value) {
+    fileFrontal.value = file  // foto del frontal (flujo tacos)
   } else {
-    fileToUpload.value = file  // foto del bote
+    fileToUpload.value = file  // foto del bote (culo en flujo tacos)
   }
 
   const cacheKey = file.name + file.size
@@ -1042,6 +1121,8 @@ const handleImageCaptured = (file) => {
   // Enviar al webhook correspondiente
   if (pidiendoCaja.value) {
     enviarAOCRCaja(file)
+  } else if (pidiendoFrontal.value) {
+    enviarAOCRFrontal(file)
   } else {
     enviarAOCR(file)
   }
@@ -1143,6 +1224,87 @@ const procesarRespuestaCaja = (data) => {
 const reintentarCaja = () => {
   cajaResult.value = null
   fileCaja.value = null
+  showCamera.value = true
+}
+
+// =============================================================================
+// FLUJO TACOS: Foto 2 del bote (FRONTAL con datos sobre film verde)
+// Solo se activa cuando verifyParams.flujoTacos === true (orden Del Monte Tacos)
+// =============================================================================
+
+const enviarAOCRFrontal = async (file) => {
+  isProcessing.value = true
+
+  const formDataSend = new FormData()
+  formDataSend.append('file', file)
+
+  try {
+    const response = await fetch(webhookTacosFrontalUrl, {
+      method: 'POST',
+      body: formDataSend,
+    })
+
+    if (!response.ok) throw new Error(`Error del servidor: ${response.status}`)
+
+    const data = await response.json()
+    if (!data) throw new Error('La respuesta del webhook frontal está vacía.')
+
+    procesarRespuestaFrontal(data)
+  } catch (error) {
+    frontalResult.value = { ok: false, errores: [`Error analizando frontal: ${error.message}`] }
+  } finally {
+    isProcessing.value = false
+  }
+}
+
+// Valida los datos del frontal contra la orden.
+// El frontal aporta: producto, fecha_caducidad, lote.
+// - fecha_caducidad debe coincidir con verifyParams.fechaCad (o fechaProduccion + P+X)
+// - lote NO se valida (solo se guarda)
+// - producto se valida con sanity check ("piña troceada" + gramaje)
+const procesarRespuestaFrontal = (data) => {
+  if (!verifyMode.value || !verifyParams) return
+  const errores = []
+
+  if (data.bloqueo_ia || data.cliente === 'REINTENTAR') {
+    errores.push('La IA no pudo procesar la imagen frontal. Vuelve a hacer la foto.')
+  } else {
+    // Sanity: el producto debería decir "piña troceada"
+    const producto = String(data.producto || '').toLowerCase()
+    if (producto && producto !== 'no detectado' && !/pi[ñn]a\s*troceada/i.test(producto)) {
+      errores.push(`Producto inesperado en el frontal. Etiqueta: ${data.producto}`)
+    }
+
+    // Validar fecha de caducidad contra la orden.
+    // En flujo verify normal: verifyParams.fechaCad (formato YYYY-MM-DD)
+    // En flujo verify-otro-día: lo calculamos como fechaProduccion + px
+    const fechaCadEsperada = verifyParams.fechaCad
+      ? parseFechaFlexible(verifyParams.fechaCad)
+      : null
+    const fechaCadEnvasadoRef = verifyParams.fechaProduccion
+      ? parseFechaFlexible(verifyParams.fechaProduccion)
+      : null
+    const fechaCadLeida = parseFechaConRef(data.fecha_caducidad, fechaCadEnvasadoRef || fechaCadEsperada)
+
+    if (fechaCadEsperada && fechaCadLeida) {
+      if (fechaCadEsperada.getTime() !== fechaCadLeida.getTime()) {
+        errores.push(`Fecha caducidad frontal no coincide. Etiqueta: ${data.fecha_caducidad} · Esperada: ${verifyParams.fechaCad}`)
+      }
+    } else if (!fechaCadLeida) {
+      errores.push(`No se pudo leer la fecha de caducidad del frontal (${data.fecha_caducidad || '—'}).`)
+    }
+  }
+
+  frontalResult.value = errores.length === 0
+    ? { ok: true, datos: data }
+    : { ok: false, errores }
+
+  console.log('[VERIFY FRONTAL] Resultado:', frontalResult.value)
+}
+
+const reintentarFrontal = () => {
+  frontalResult.value = null
+  fileFrontal.value = null
   showCamera.value = true
 }
 
@@ -1331,13 +1493,13 @@ const compararBoteConOrden = (data) => {
   const errores = []
 
   // === EXCEPCIÓN TEMPORAL: Del Monte Piña Tacos 400g ===
-  // Mientras se completa el soporte del nuevo formato (datos impresos sobre
-  // film verde), para este producto solo validamos EAN + origen. EAN en DB
-  // es de 12 dígitos (sin check digit); el OCR puede traer 13 dígitos con
-  // dígito de control distinto → comparamos los 12 primeros.
-  // QUITAR esta isla cuando el flujo normal soporte la etiqueta sobre film.
+  // Bypass que solo aplica si la Hoja de Fabricación NO ha activado el nuevo
+  // flujo de 2 fotos (flujo_tacos). Cuando flujo_tacos está activo, queremos
+  // la validación completa culo+frontal y este bloque no debe ejecutarse.
+  // QUITAR esta isla cuando flujo_tacos esté en producción para todas las
+  // órdenes Del Monte Tacos.
   const eanLeidoBote = String(data.ean || '').replace(/\s+/g, '')
-  if (eanLeidoBote.startsWith('872109893331')) {
+  if (!verifyParams.flujoTacos && eanLeidoBote.startsWith('872109893331')) {
     const origenOK = /costa\s*rica/i.test(String(data.origen || ''))
     if (!origenOK) {
       verifyResult.value = {
@@ -1369,6 +1531,32 @@ const compararBoteConOrden = (data) => {
       if (!matchea(clienteBote, clienteEsperado) && !matchea(aliasBote, clienteEsperado)) {
         errores.push(`Cliente no coincide. Etiqueta: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
       }
+    }
+
+    // === FLUJO TACOS (foto culo) ===
+    // El culo solo trae EAN y origen. P+X, fechas y lote vienen del frontal
+    // y se validan en procesarRespuestaFrontal. Aquí solo aseguramos que el
+    // culo corresponde realmente al producto Del Monte Piña Tacos 400g.
+    if (verifyParams.flujoTacos) {
+      const eanLeido = String(data.ean || '').replace(/\s+/g, '')
+      if (!eanLeido.startsWith('872109893331')) {
+        errores.push(`EAN no corresponde a Del Monte Piña Tacos 400g. Etiqueta: ${data.ean || '—'}`)
+      }
+      const origenOK = /costa\s*rica/i.test(String(data.origen || ''))
+      if (!origenOK) {
+        errores.push(`Origen no coincide. Etiqueta: ${data.origen || '—'} · Esperado: Costa Rica`)
+      }
+      // Saltamos px / fechas / GUFRESCO: no aplican al culo
+      verifyResult.value = errores.length === 0
+        ? { ok: true, datos: data }
+        : { ok: false, errores }
+      // Si todo OK, saltamos el escaneo físico de EAN: lo damos por validado
+      // por OCR. La watch de eanCoincide nos llevará a pedir el frontal.
+      if (verifyResult.value.ok) {
+        eanCoincide.value = true
+      }
+      console.log('[VERIFY MODE / TACOS culo] Resultado:', verifyResult.value)
+      return
     }
 
     // En MODO NORMAL (etiqueta del día actual) usamos pxLeido tal como lo
