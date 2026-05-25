@@ -1276,22 +1276,32 @@ const procesarRespuestaFrontal = (data) => {
     }
 
     // Validar fecha de caducidad contra la orden.
-    // En flujo verify normal: verifyParams.fechaCad (formato YYYY-MM-DD)
-    // En flujo verify-otro-día: lo calculamos como fechaProduccion + px
+    // - Modo verify NORMAL (comprobar del día): comparamos caducidad OCR vs verifyParams.fechaCad
+    // - Modo verify OTRO DÍA: la fuente de verdad es fechaProduccion + px tecleado
+    //   (la fechaCad de la orden histórica puede no coincidir con la P+X tecleada).
+    const env = verifyParams.fechaProduccion
+      ? parseFechaFlexible(verifyParams.fechaProduccion)
+      : null
     const fechaCadEsperada = verifyParams.fechaCad
       ? parseFechaFlexible(verifyParams.fechaCad)
       : null
-    const fechaCadEnvasadoRef = verifyParams.fechaProduccion
-      ? parseFechaFlexible(verifyParams.fechaProduccion)
-      : null
-    const fechaCadLeida = parseFechaConRef(data.fecha_caducidad, fechaCadEnvasadoRef || fechaCadEsperada)
+    const fechaCadLeida = parseFechaConRef(data.fecha_caducidad, env || fechaCadEsperada)
 
-    if (fechaCadEsperada && fechaCadLeida) {
+    if (!fechaCadLeida) {
+      errores.push(`No se pudo leer la fecha de caducidad del frontal (${data.fecha_caducidad || '—'}).`)
+    } else if (verifyParams.fechaProduccion) {
+      // MODO OTRO DÍA: calcular P+X real desde la fecha de producción
+      if (env && verifyParams.px !== null) {
+        const pxReal = Math.round((fechaCadLeida - env) / 86400000)
+        if (pxReal !== verifyParams.px) {
+          errores.push(`P+X frontal no coincide. Caducidad (${data.fecha_caducidad}) − producción (${verifyParams.fechaProduccion}) = P+${pxReal} · Esperado: P+${verifyParams.px}`)
+        }
+      }
+    } else if (fechaCadEsperada) {
+      // MODO NORMAL: comparar la fecha contra la de la orden
       if (fechaCadEsperada.getTime() !== fechaCadLeida.getTime()) {
         errores.push(`Fecha caducidad frontal no coincide. Etiqueta: ${data.fecha_caducidad} · Esperada: ${verifyParams.fechaCad}`)
       }
-    } else if (!fechaCadLeida) {
-      errores.push(`No se pudo leer la fecha de caducidad del frontal (${data.fecha_caducidad || '—'}).`)
     }
   }
 
@@ -1509,10 +1519,12 @@ const compararBoteConOrden = (data) => {
       console.log('[VERIFY MODE] Bypass Piña Tacos 400g: origen KO →', data.origen)
       return
     }
-    // Saltarse escaneo EAN físico y foto de caja: directo a VERIFICADO
+    // Saltarse escaneo EAN físico y foto de caja: directo a VERIFICADO.
+    // Simulamos el escaneo poniendo eanEscaneado = data.ean para que el
+    // computed eanCoincide pase a true (es de solo lectura, no se puede asignar).
     data.etiqueta_de_caja = false
     verifyResult.value = { ok: true, datos: data }
-    eanCoincide.value = true
+    eanEscaneado.value = data.ean || ''
     console.log('[VERIFY MODE] Bypass Piña Tacos 400g aplicado (verde directo)')
     return
   }
@@ -1552,8 +1564,9 @@ const compararBoteConOrden = (data) => {
         : { ok: false, errores }
       // Si todo OK, saltamos el escaneo físico de EAN: lo damos por validado
       // por OCR. La watch de eanCoincide nos llevará a pedir el frontal.
+      // (eanCoincide es computed, no se puede asignar; simulamos el escaneo)
       if (verifyResult.value.ok) {
-        eanCoincide.value = true
+        eanEscaneado.value = data.ean || ''
       }
       console.log('[VERIFY MODE / TACOS culo] Resultado:', verifyResult.value)
       return
