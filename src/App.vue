@@ -1535,13 +1535,18 @@ const compararBoteConOrden = (data) => {
     // Comparar cliente FLEXIBLE (uno contiene al otro) — acepta también cliente_alias
     // Ej1: OCR detecta "ALDI", la orden dice "ALDI SAGUNTO" → coinciden (substring)
     // Ej2: OCR detecta "DELMONTE" con alias "CONSUM", la orden dice "CONSUM" → coinciden (alias)
-    const clienteBote = (data.cliente || '').toUpperCase().trim()
-    const aliasBote = (data.cliente_alias || '').toUpperCase().trim()
-    const clienteEsperado = (verifyParams.cliente || '').toUpperCase().trim()
-    const matchea = (a, b) => a && b && (a.includes(b) || b.includes(a))
-    if (clienteEsperado) {
-      if (!matchea(clienteBote, clienteEsperado) && !matchea(aliasBote, clienteEsperado)) {
-        errores.push(`Cliente no coincide. Etiqueta: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
+    // En flujo_tacos saltamos este chequeo: la etiqueta del CULO casi nunca
+    // trae el nombre del cliente final, solo info regulatoria ("Del Monte"
+    // como fabricante). La identificación de producto se hace por EAN+origen.
+    if (!verifyParams.flujoTacos) {
+      const clienteBote = (data.cliente || '').toUpperCase().trim()
+      const aliasBote = (data.cliente_alias || '').toUpperCase().trim()
+      const clienteEsperado = (verifyParams.cliente || '').toUpperCase().trim()
+      const matchea = (a, b) => a && b && (a.includes(b) || b.includes(a))
+      if (clienteEsperado) {
+        if (!matchea(clienteBote, clienteEsperado) && !matchea(aliasBote, clienteEsperado)) {
+          errores.push(`Cliente no coincide. Etiqueta: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
+        }
       }
     }
 
@@ -1552,17 +1557,21 @@ const compararBoteConOrden = (data) => {
     if (verifyParams.flujoTacos) {
       const eanLeido = String(data.ean || '').replace(/\s+/g, '')
       const productoDb = String(data.producto_db || '')
-      // El OCR a veces no lee los 13 dígitos completos del barcode curvado
-      // del culo (el plástico curva la imagen). Aceptamos identificación por:
-      //  1) EAN OCR que empiece por "8721098" (prefijo Del Monte), O
-      //  2) producto_db que indique Piña Tacos 400g (lo que n8n identificó
-      //     vía lookup por prefijo de 7 dígitos en la DB).
-      const eanMatch = eanLeido.startsWith('8721098')
+      // El parser del workflow a veces falla porque el EAN del culo viene
+      // espaciado en la etiqueta ("8 721 089 933 16"). Como red de seguridad,
+      // limpiamos el texto OCR raw y buscamos el prefijo Del Monte ahí.
+      const textoOcrLimpio = String(data.debug_texto_ocr || '').replace(/\s+/g, '')
+      const eanMatch =
+        eanLeido.startsWith('8721098') ||
+        textoOcrLimpio.includes('8721098')
       const productoMatch = /PI[ÑN]A\s+TACOS.*400/i.test(productoDb)
       if (!eanMatch && !productoMatch) {
         errores.push(`No corresponde a Del Monte Piña Tacos 400g. Etiqueta: EAN "${data.ean || '—'}" · Producto "${productoDb || '—'}"`)
       }
-      const origenOK = /costa\s*rica/i.test(String(data.origen || ''))
+      // Origen: aceptar tanto data.origen (parser) como debug_texto_ocr (raw)
+      const origenOK =
+        /costa\s*rica/i.test(String(data.origen || '')) ||
+        /costa\s*rica/i.test(String(data.debug_texto_ocr || ''))
       if (!origenOK) {
         errores.push(`Origen no coincide. Etiqueta: ${data.origen || '—'} · Esperado: Costa Rica`)
       }
