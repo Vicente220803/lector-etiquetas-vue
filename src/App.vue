@@ -1551,8 +1551,16 @@ const compararBoteConOrden = (data) => {
     // culo corresponde realmente al producto Del Monte Piña Tacos 400g.
     if (verifyParams.flujoTacos) {
       const eanLeido = String(data.ean || '').replace(/\s+/g, '')
-      if (!eanLeido.startsWith('872109893331')) {
-        errores.push(`EAN no corresponde a Del Monte Piña Tacos 400g. Etiqueta: ${data.ean || '—'}`)
+      const productoDb = String(data.producto_db || '')
+      // El OCR a veces no lee los 13 dígitos completos del barcode curvado
+      // del culo (el plástico curva la imagen). Aceptamos identificación por:
+      //  1) EAN OCR que empiece por "8721098" (prefijo Del Monte), O
+      //  2) producto_db que indique Piña Tacos 400g (lo que n8n identificó
+      //     vía lookup por prefijo de 7 dígitos en la DB).
+      const eanMatch = eanLeido.startsWith('8721098')
+      const productoMatch = /PI[ÑN]A\s+TACOS.*400/i.test(productoDb)
+      if (!eanMatch && !productoMatch) {
+        errores.push(`No corresponde a Del Monte Piña Tacos 400g. Etiqueta: EAN "${data.ean || '—'}" · Producto "${productoDb || '—'}"`)
       }
       const origenOK = /costa\s*rica/i.test(String(data.origen || ''))
       if (!origenOK) {
