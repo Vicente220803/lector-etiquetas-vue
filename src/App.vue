@@ -746,12 +746,19 @@ const enviarResultadoVerificacion = async () => {
   // si no, intentamos derivarla del fecha_envasado leído por el OCR.
   const fechaProduccionISO = verifyParams.fechaProduccion
     || toIsoDate(parseFechaFlexible(datos.fecha_envasado))
+  // px_usuario en la BD es INTEGER. En el payload va como string (para el email),
+  // pero al insertarlo en Supabase necesitamos número o null — un "" rompe el insert
+  // con 400 Bad Request, y en flujo_tacos el culo no calcula P+X así que viene 0/vacío.
+  const pxUsuarioNum = Number(payload.px_usuario)
+  const pxUsuarioParaDb = Number.isFinite(pxUsuarioNum) && payload.px_usuario !== ''
+    ? pxUsuarioNum
+    : null
   try {
     await supabase.from('audit_logs').insert([{
       timestamp,
       cliente: datos.cliente,
       ean: datos.ean,
-      px_usuario: payload.px_usuario,
+      px_usuario: pxUsuarioParaDb,
       estado: 'VERIFICADA',
       detalles: payload,
       fecha_produccion: fechaProduccionISO,
