@@ -1175,19 +1175,31 @@ const procesarRespuestaCaja = (data) => {
       errores.push(`Cliente caja no coincide. Caja: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
     }
 
-    // Comparar lote de la caja con el del bote (si ambos lo tienen).
-    // El lote del bote incluye un identificador de unidad/hora al final
+    // Comparar lote de la caja con el del bote (o con el del frontal en flujo_tacos).
+    // En flujo_tacos el culo NO trae lote impreso (solo info regulatoria), el lote
+    // real va en la etiqueta FRONTAL. Por eso comparamos contra frontalResult.
+    // El lote del bote/frontal incluye un identificador de unidad/hora al final
     // (p.ej. bote = "002141121300", caja = "002141"), por eso aceptamos
     // que uno sea prefijo del otro en lugar de exigir igualdad estricta.
-    const loteBote = verifyResult.value?.datos?.lote
+    const loteReferencia = verifyParams.flujoTacos
+      ? frontalResult.value?.datos?.lote
+      : verifyResult.value?.datos?.lote
     const loteCajaRaw = data.datos_extraidos?.lote
-    if (loteBote && loteCajaRaw && loteCajaRaw !== 'No detectado') {
+    const loteRefValido = loteReferencia && loteReferencia !== 'No detectado'
+    if (loteRefValido && loteCajaRaw && loteCajaRaw !== 'No detectado') {
       const normLote = (l) => String(l || '').replace(/\s+/g, '').trim()
       const a = normLote(loteCajaRaw)
-      const b = normLote(loteBote)
-      const coincide = a && b && (a === b || a.startsWith(b) || b.startsWith(a))
+      const b = normLote(loteReferencia)
+      // En flujo_tacos también aceptamos match por DÍA JULIANO (últimos 3 dígitos):
+      // el OCR a veces extrae "001 148" vs "1 148" del mismo lote físico, pero
+      // el día juliano (148) es la parte estable que identifica el día de envasado.
+      const sufijoJuliano = (s) => /^\d{3,}$/.test(s) ? s.slice(-3) : ''
+      const coincidePrefijo = a && b && (a === b || a.startsWith(b) || b.startsWith(a))
+      const coincideJuliano = verifyParams.flujoTacos && sufijoJuliano(a) && sufijoJuliano(a) === sufijoJuliano(b)
+      const coincide = coincidePrefijo || coincideJuliano
       if (!coincide) {
-        errores.push(`Lote caja no coincide con el bote. Caja: ${loteCajaRaw} · Bote: ${loteBote}`)
+        const fuente = verifyParams.flujoTacos ? 'frontal' : 'bote'
+        errores.push(`Lote caja no coincide con el ${fuente}. Caja: ${loteCajaRaw} · ${fuente}: ${loteReferencia}`)
       }
     }
 
