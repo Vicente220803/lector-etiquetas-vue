@@ -1594,16 +1594,14 @@ const compararBoteConOrden = (data) => {
       if (!origenOK) {
         errores.push(`Origen no coincide. Etiqueta: ${data.origen || '—'} · Esperado: Costa Rica`)
       }
-      // Saltamos px / fechas / GUFRESCO: no aplican al culo
+      // Saltamos px / fechas / GUFRESCO: no aplican al culo.
+      // NO autorrellenamos eanEscaneado: para trazabilidad estricta el operario
+      // DEBE escanear físicamente el barcode con la pistola y comparar contra
+      // el EAN leído por OCR. Cuando coincida, eanCoincide=true y la watch
+      // pasará automáticamente a la fase de foto frontal.
       verifyResult.value = errores.length === 0
         ? { ok: true, datos: data }
         : { ok: false, errores }
-      // Si todo OK, saltamos el escaneo físico de EAN: lo damos por validado
-      // por OCR. La watch de eanCoincide nos llevará a pedir el frontal.
-      // (eanCoincide es computed, no se puede asignar; simulamos el escaneo)
-      if (verifyResult.value.ok) {
-        eanEscaneado.value = data.ean || ''
-      }
       console.log('[VERIFY MODE / TACOS culo] Resultado:', verifyResult.value)
       return
     }
