@@ -1009,14 +1009,17 @@ const eanCoincide = computed(() => {
 
   // Prioridad de comparación (más fiable → menos fiable):
   // 1. ean_esperado_completo: construido por workflow desde BD + importe/peso + check
-  //    (MERCADONA, LIDL, ALDI — peso variable, EAN dinámico)
-  // 2. ean_bd: EAN fijo de BD (≥12 dig). MASKOMO, DELMONTE TACOS, CONSUM, DELMONTE coco.
-  //    NO usar si es solo prefijo (9 dig de MERCADONA/LIDL/ALDI sin construcción) — sería falso negativo.
+  //    (MERCADONA, LIDL, CONSUM, DELMONTE cilindro, ALDI piña — peso variable, EAN dinámico)
+  // 2. ean_bd: EAN completo en BD. Acepta:
+  //    - EAN-13 (≥12 dig): MASKOMO, DELMONTE TACOS, CONSUM coco, DELMONTE coco
+  //    - EAN-8 (8 dig): ALDI coco IFCO
+  //    NO usa prefijos 9-11 dig (sin construcción) — serían falsos negativos.
   // 3. OCR (formData.ean): fallback para clientes sin EAN en BD (ANTICH, GUFRESCO, SUREXPORT)
   const eanBdStr = datos?.ean_bd ? String(datos.ean_bd).trim() : ''
+  const eanBdUsable = eanBdStr.length === 8 || eanBdStr.length >= 12
   const eanReferencia =
     (datos?.ean_esperado_completo && String(datos.ean_esperado_completo).trim()) ||
-    (eanBdStr.length >= 12 ? eanBdStr : '') ||
+    (eanBdUsable ? eanBdStr : '') ||
     (formData.value.ean && formData.value.ean.trim()) ||
     ''
 
