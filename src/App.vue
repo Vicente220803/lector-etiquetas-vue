@@ -1002,8 +1002,26 @@ const eanCoincide = computed(() => {
   // TACOS fase=film o fase=caja: esas etiquetas no llevan barcode → saltar EAN
   // (tarrina sí pide escaneo porque su etiqueta sí tiene EAN)
   if (verifyParams?.fase === 'film' || verifyParams?.fase === 'caja') return true
-  if (!eanEscaneado.value || !formData.value.ean) return null
-  return formData.value.ean.trim() === eanEscaneado.value.trim()
+  if (!eanEscaneado.value) return null
+
+  const scanned = eanEscaneado.value.trim()
+  const datos = verifyResult.value?.datos
+
+  // Prioridad de comparación (más fiable → menos fiable):
+  // 1. ean_esperado_completo: construido por workflow desde BD + importe/peso + check
+  //    (MERCADONA, LIDL, ALDI — peso variable, EAN dinámico)
+  // 2. ean_bd: EAN fijo de BD (≥12 dig). MASKOMO, DELMONTE TACOS, CONSUM, DELMONTE coco.
+  //    NO usar si es solo prefijo (9 dig de MERCADONA/LIDL/ALDI sin construcción) — sería falso negativo.
+  // 3. OCR (formData.ean): fallback para clientes sin EAN en BD (ANTICH, GUFRESCO, SUREXPORT)
+  const eanBdStr = datos?.ean_bd ? String(datos.ean_bd).trim() : ''
+  const eanReferencia =
+    (datos?.ean_esperado_completo && String(datos.ean_esperado_completo).trim()) ||
+    (eanBdStr.length >= 12 ? eanBdStr : '') ||
+    (formData.value.ean && formData.value.ean.trim()) ||
+    ''
+
+  if (!eanReferencia) return null
+  return eanReferencia === scanned
 })
 
 // En modo verificación, cuando EAN coincide:
