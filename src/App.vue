@@ -46,7 +46,7 @@
             <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
             <div><b>Producto:</b> {{ verifyResult.datos.producto_db }}</div>
             <div><b>EAN:</b> {{ verifyResult.datos.ean }}</div>
-            <div><b>P+X:</b> {{ verifyResult.datos.validacion_px?.px_leido }}</div>
+            <div v-if="verifyParams?.fase !== 'tarrina'"><b>P+X:</b> {{ verifyResult.datos.validacion_px?.px_leido }}</div>
           </div>
           <input
             ref="eanInputRef"
@@ -508,7 +508,7 @@
     <div v-if="showCamera" class="camera-modal">
       <Camera
         :show-camera="showCamera"
-        :title="pidiendoCaja ? 'FOTO CAJA' : (pidiendoFrontal ? 'FOTO FRONTAL' : 'FOTO BOTE')"
+        :title="cameraTitle"
         @image-captured="handleImageCaptured"
         @close-camera="closeCamera"
       />
@@ -547,7 +547,13 @@ const verifyParams = (() => {
     fechaCad: params.get('fecha_cad') || '',
     fechaProduccion: params.get('fecha_produccion') || '',
     flujoTacos: params.get('flujo_tacos') === 'true',
-    orderId: params.get('order_id') || ''
+    orderId: params.get('order_id') || '',
+    // Fase específica para DELMONTE TACOS (3 fases):
+    // 'tarrina' = etiqueta del fondo (sin fechas, solo identifica producto)
+    // 'film' = etiqueta marcado film (con fechas y lote)
+    // 'caja' = etiqueta exterior de la caja
+    // Si no llega → flujo normal (bote → caja)
+    fase: params.get('fase') || null
   }
 })()
 const verifyMode = ref(verifyParams !== null)
@@ -564,6 +570,19 @@ const eanInputRef = ref(null)
 const matchStatus = ref(null)  // null | 'waiting' | 'no-match' | 'already-verified'
 const matchMensaje = ref('')   // mensaje a mostrar en no-match / already-verified
 const boteDataPending = ref(null) // datos OCR guardados mientras esperamos al padre
+
+// Título de la cámara según la fase del verify
+// - DELMONTE TACOS usa 3 fases con títulos específicos
+// - Resto de productos: flujo actual bote → caja
+const cameraTitle = computed(() => {
+  const fase = verifyParams?.fase
+  if (fase === 'tarrina') return 'FOTO ETIQUETA TARRINA'
+  if (fase === 'film') return 'FOTO MARCADO FILM'
+  if (fase === 'caja') return 'ETIQUETA CAJA'
+  if (pidiendoCaja.value) return 'FOTO CAJA'
+  if (pidiendoFrontal.value) return 'FOTO FRONTAL'
+  return 'FOTO BOTE'
+})
 
 if (verifyParams) {
   console.log('[VERIFY MODE] Parámetros recibidos:', verifyParams)
@@ -780,10 +799,19 @@ const enviarResultadoVerificacion = async () => {
   }
 
   // 3. postMessage al padre (Hoja de Fabricación) para que marque la fila en verde
+  // El campo `fase` solo viene para DELMONTE TACOS (tarrina/film/caja).
+  // El padre lo usa para decidir si reabrir el iframe en la siguiente fase
+  // o cerrar definitivamente (flujo normal).
+  // `next` indica al padre qué fase abrir después (o null/undefined = cerrar).
+  const next = verifyParams.fase === 'tarrina' ? 'film'
+             : verifyParams.fase === 'film' ? 'caja'
+             : null
   const mensaje = {
     source: 'lector-etiquetas',
     type: 'verification-complete',
     orderId: verifyParams.orderId,
+    fase: verifyParams.fase || null,
+    next,
     result: 'ok',
     data: payload,
     timestamp
@@ -971,6 +999,9 @@ const eanCoincide = computed(() => {
     verifyResult.value?.datos?.producto_sin_ean === true &&
     formData.value.ean === 'No detectado'
   ) return true
+  // TACOS fase=film o fase=caja: esas etiquetas no llevan barcode → saltar EAN
+  // (tarrina sí pide escaneo porque su etiqueta sí tiene EAN)
+  if (verifyParams?.fase === 'film' || verifyParams?.fase === 'caja') return true
   if (!eanEscaneado.value || !formData.value.ean) return null
   return formData.value.ean.trim() === eanEscaneado.value.trim()
 })
@@ -982,7 +1013,15 @@ const eanCoincide = computed(() => {
 watch(eanCoincide, (val) => {
   if (!verifyMode.value || val !== true || !verifyResult.value?.ok) return
 
-  // Flujo tacos: primero pedimos el frontal (foto 2 del bote)
+  // TACOS (3 fases nuevo): cada fase es sesión independiente del iframe.
+  // En tarrina/film no disparamos pidiendoCaja — solo enviamos verification-complete
+  // y el padre abre la siguiente fase.
+  if (verifyParams.fase === 'tarrina' || verifyParams.fase === 'film') {
+    enviarResultadoVerificacion()
+    return
+  }
+
+  // Flujo tacos LEGACY (single-session): primero pedimos el frontal (foto 2 del bote)
   if (verifyParams.flujoTacos && !frontalResult.value?.ok) {
     pidiendoFrontal.value = true
     setTimeout(() => { showCamera.value = true }, 600)
@@ -990,7 +1029,7 @@ watch(eanCoincide, (val) => {
   }
 
   if (verifyResult.value.datos?.etiqueta_de_caja === true) {
-    // Activar fase caja y abrir cámara
+    // Activar fase caja y abrir cámara (flujo normal de 1 sesión)
     pidiendoCaja.value = true
     setTimeout(() => { showCamera.value = true }, 600)
   } else {
@@ -1125,8 +1164,10 @@ const handleImageCaptured = (file) => {
 
   closeCamera()
 
-  // Enviar al webhook correspondiente
-  if (pidiendoCaja.value) {
+  // Enviar al webhook correspondiente:
+  // - pidiendoCaja: flujo normal de hoy (bote → caja)
+  // - fase === 'caja': flujo TACOS, la fase 3 va directamente al webhook de caja
+  if (pidiendoCaja.value || verifyParams?.fase === 'caja') {
     enviarAOCRCaja(file)
   } else if (pidiendoFrontal.value) {
     enviarAOCRFrontal(file)
@@ -1162,6 +1203,28 @@ const enviarAOCRCaja = async (file) => {
 
 const procesarRespuestaCaja = (data) => {
   if (!verifyMode.value || !verifyParams) return
+
+  // TACOS fase=caja: el iframe se abrió solo para esta foto, no tiene los
+  // datos del bote/film (esas fases fueron en sesiones de iframe anteriores).
+  // Enviamos verification-complete con la info de la caja en `data`.
+  // `next: null` indica al padre que es la última fase → cierra el iframe.
+  if (verifyParams.fase === 'caja') {
+    const mensaje = {
+      source: 'lector-etiquetas',
+      type: 'verification-complete',
+      orderId: verifyParams.orderId,
+      fase: 'caja',
+      next: null,
+      result: 'ok',
+      data: JSON.parse(JSON.stringify(data))
+    }
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage(mensaje, '*')
+      console.log('[VERIFY TACOS CAJA] verification-complete enviado al padre:', mensaje)
+    }
+    cajaResult.value = { ok: true, datos: data }
+    return
+  }
 
   const errores = []
 
@@ -1422,6 +1485,11 @@ const enviarAOCR = async (file) => {
 
   const formDataSend = new FormData()
   formDataSend.append('file', file)
+  // Modo TACOS: el padre indica la fase (tarrina/film/caja).
+  // El workflow piña la usa para saber qué validar y qué omitir.
+  if (verifyParams?.fase) {
+    formDataSend.append('fase', verifyParams.fase)
+  }
 
   const urlOCR = modoProducto.value === 'coco' ? webhookCocoUrl : webhookUrl
 
@@ -1488,11 +1556,14 @@ const aplicarDatosOCR = (data) => {
       const mensaje = {
         source: 'lector-etiquetas',
         type: 'bote-analyzed',
+        fase: verifyParams.fase || null,
         data: JSON.parse(JSON.stringify({
           cliente: data.cliente_alias || data.cliente,
           cliente_alias: data.cliente_alias || null,
           producto_db: data.producto_db,
           ean: data.ean,
+          ean_bd: data.ean_bd || null,
+          ean_esperado_completo: data.ean_esperado_completo || null,
           lote: data.lote,
           fecha_envasado: data.fecha_envasado,
           fecha_caducidad: data.fecha_caducidad,
