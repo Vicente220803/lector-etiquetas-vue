@@ -732,6 +732,12 @@ const enviarResultadoVerificacion = async () => {
     producto_db: datosFrontal?.producto || datos.producto_db,
     origen: datos.origen,
     ean: datos.ean,
+    // Trazabilidad de la comparación EAN: registramos qué valor de BD se usó
+    // como referencia (BD fijo o construido por peso/importe). El campo `ean`
+    // de arriba es el leído por OCR; estos dos son los de la fuente de verdad.
+    ean_bd: datos.ean_bd || null,
+    ean_esperado_completo: datos.ean_esperado_completo || null,
+    dun: datos.dun || null,
     lote: datosFrontal?.lote || datos.lote,
     codigo_r: datos.codigo_r,
     fecha_envasado: datos.fecha_envasado,
@@ -756,6 +762,9 @@ const enviarResultadoVerificacion = async () => {
       cliente: datosCaja.cliente,
       fecha_caducidad: datosCaja.fecha_caducidad,
       datos_extraidos: datosCaja.datos_extraidos || {},
+      // DUN físico leído del barcode de la caja (GTIN-14 del campo (01) en GS1).
+      // Compara contra `dun` del bote (BD) en procesarRespuestaCaja.
+      dun_leido_caja: datosCaja.datos_extraidos?.ean || null,
       foto_base64: fotoCaja
     } : null
   }
