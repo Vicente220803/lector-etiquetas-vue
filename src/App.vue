@@ -1518,6 +1518,12 @@ const enviarAOCR = async (file) => {
 
   const formDataSend = new FormData()
   formDataSend.append('file', file)
+  // Verify mode: pasamos el cliente de la orden como autoridad directa.
+  // El workflow lo prioriza sobre la identificación por OCR/EAN (evita ambigüedades
+  // como MASKOMO piña/coco que comparten prefijo EAN).
+  if (verifyParams?.cliente) {
+    formDataSend.append('cliente', verifyParams.cliente)
+  }
   // Modo TACOS: el padre indica la fase (tarrina/film/caja).
   // El workflow piña la usa para saber qué validar y qué omitir.
   if (verifyParams?.fase) {
