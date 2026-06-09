@@ -1550,6 +1550,13 @@ const enviarAOCR = async (file) => {
   if (verifyParams?.cliente) {
     formDataSend.append('cliente', verifyParams.cliente)
   }
+  // Verify mode: fecha de la orden (formato YYYY-MM-DD) como referencia real
+  // de envasado. El workflow la usa como dReferencia para calcular P+X y
+  // mostrar la fecha de envasado correcta. Sin esto el workflow asume "hoy",
+  // que falla cuando se verifica una etiqueta del día anterior.
+  if (verifyParams?.fechaProduccion) {
+    formDataSend.append('fecha_produccion', verifyParams.fechaProduccion)
+  }
   // Modo TACOS: el padre indica la fase (tarrina/film/caja).
   // El workflow piña la usa para saber qué validar y qué omitir.
   if (verifyParams?.fase) {
