@@ -766,6 +766,12 @@ const enviarResultadoVerificacion = async () => {
       // Compara contra `dun` del bote (BD) en procesarRespuestaCaja.
       dun_leido_caja: datosCaja.datos_extraidos?.ean || null,
       foto_base64: fotoCaja
+    } : null,
+    // Marca esta audit_log como la de la fase FILM del flujo TACOS 3 fases.
+    // En fase=film la foto principal (foto_base64) ya es la del film; este slot
+    // sirve al padre como indicador semántico para visualizarlo aparte.
+    film: verifyParams.fase === 'film' ? {
+      foto_base64: fotoBote
     } : null
   }
 
