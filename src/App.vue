@@ -1315,6 +1315,18 @@ const procesarRespuestaCaja = (data) => {
         errores.push(`Fecha caducidad caja no coincide. Caja: ${data.fecha_caducidad || '—'} · Esperado: ${verifyParams.fechaCad}`)
       }
     }
+
+    // Validar DUN de la caja: barcode GTIN-14 leído de `(01) ...` vs DUN de BD del bote.
+    // Solo si el producto tiene `dun` en BD y la caja trae barcode. Cazaría cajas mal
+    // montadas (ej. bote dentro de caja de otro producto del mismo cliente/día).
+    const dunBote = verifyResult.value?.datos?.dun
+    const dunCajaRaw = data.datos_extraidos?.ean
+    if (dunBote && dunCajaRaw && dunCajaRaw !== 'No detectado') {
+      const norm = (s) => String(s || '').replace(/\s+/g, '').trim()
+      if (norm(dunCajaRaw) !== norm(dunBote)) {
+        errores.push(`DUN caja no coincide. Caja: ${dunCajaRaw} · Esperado: ${dunBote}`)
+      }
+    }
   }
 
   cajaResult.value = errores.length === 0
