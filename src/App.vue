@@ -45,7 +45,7 @@
           <div class="verify-info verify-info-ok">
             <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
             <div><b>Producto:</b> {{ verifyResult.datos.producto_db }}</div>
-            <div><b>EAN:</b> {{ verifyResult.datos.ean }}</div>
+            <div><b>EAN:</b> {{ eanMostrado }}</div>
             <div v-if="verifyParams?.fase !== 'tarrina'"><b>P+X:</b> {{ verifyResult.datos.validacion_px?.px_leido }}</div>
           </div>
           <input
@@ -74,7 +74,7 @@
           <div class="verify-info verify-info-ok">
             <div><b>Culo verificado:</b> ✅</div>
             <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
-            <div><b>EAN:</b> {{ verifyResult.datos.ean }}</div>
+            <div><b>EAN:</b> {{ eanMostrado }}</div>
           </div>
         </template>
 
@@ -102,7 +102,7 @@
           <div class="verify-info verify-info-ok">
             <div><b>Bote verificado:</b> ✅</div>
             <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
-            <div><b>EAN:</b> {{ verifyResult.datos.ean }}</div>
+            <div><b>EAN:</b> {{ eanMostrado }}</div>
           </div>
         </template>
 
@@ -128,7 +128,7 @@
           <p class="verify-subtitle">Etiqueta validada correctamente</p>
           <div class="verify-info verify-info-ok">
             <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
-            <div><b>EAN:</b> {{ verifyResult.datos.ean }}</div>
+            <div><b>EAN:</b> {{ eanMostrado }}</div>
             <div><b>P+X:</b> {{ verifyResult.datos.validacion_px?.px_leido }}</div>
           </div>
           <div v-if="frontalResult?.ok && frontalResult.datos" class="verify-info verify-info-ok" style="margin-top:10px;">
@@ -587,6 +587,17 @@ const cameraTitle = computed(() => {
 if (verifyParams) {
   console.log('[VERIFY MODE] Parámetros recibidos:', verifyParams)
 }
+
+// EAN mostrado en la UI (solo visual, no afecta a la comparación).
+// Si OCR leyó el EAN → lo mostramos. Si OCR falló pero el producto se
+// identificó por cliente-hint y BD tiene un EAN fijo → mostramos ese.
+// Así el operario no ve "No detectado" cuando en realidad el sistema
+// SÍ sabe qué EAN esperar (y puede validarlo al escanear con la pistola).
+const eanMostrado = computed(() => {
+  const ocr = verifyResult.value?.datos?.ean
+  if (ocr && ocr !== 'No detectado') return ocr
+  return verifyResult.value?.datos?.ean_bd || ocr || ''
+})
 
 // Si estamos en modo verificación, abrir cámara automáticamente al cargar.
 // El selector de operario aparece como modal flotante encima de la cámara
