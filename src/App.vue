@@ -588,15 +588,22 @@ if (verifyParams) {
   console.log('[VERIFY MODE] Parámetros recibidos:', verifyParams)
 }
 
-// EAN mostrado en la UI (solo visual, no afecta a la comparación).
-// Si OCR leyó el EAN → lo mostramos. Si OCR falló pero el producto se
-// identificó por cliente-hint y BD tiene un EAN fijo → mostramos ese.
-// Así el operario no ve "No detectado" cuando en realidad el sistema
-// SÍ sabe qué EAN esperar (y puede validarlo al escanear con la pistola).
+// EAN mostrado en la UI: refleja contra qué EAN se está comparando,
+// no lo que leyó el OCR (que puede equivocarse). Misma prioridad que
+// eanCoincide para que lo que ves en pantalla sea lo que la pistola debe matchear.
+//   1. ean_esperado_completo (construido por BD + importe/peso)
+//   2. ean_bd si es un EAN completo (8 dig EAN-8 o ≥12 dig EAN-13)
+//   3. OCR si trae algo
+//   4. ean_bd aunque sea solo prefijo (mejor que nada)
 const eanMostrado = computed(() => {
-  const ocr = verifyResult.value?.datos?.ean
+  const datos = verifyResult.value?.datos
+  if (!datos) return ''
+  if (datos.ean_esperado_completo) return String(datos.ean_esperado_completo).trim()
+  const eanBd = datos.ean_bd ? String(datos.ean_bd).trim() : ''
+  if (eanBd && (eanBd.length === 8 || eanBd.length >= 12)) return eanBd
+  const ocr = datos.ean
   if (ocr && ocr !== 'No detectado') return ocr
-  return verifyResult.value?.datos?.ean_bd || ocr || ''
+  return eanBd || ''
 })
 
 // Si estamos en modo verificación, abrir cámara automáticamente al cargar.
