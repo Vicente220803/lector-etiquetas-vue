@@ -786,7 +786,15 @@ const enviarResultadoVerificacion = async () => {
     } : null
   }
 
-  // 1. Guardar en Supabase audit_logs
+  // ¿Esta es la fase FINAL del flujo? Solo entonces guardamos audit_log y email.
+  // - Flujo NORMAL (sin `fase`): es la única sesión → es la final.
+  // - Flujo TACOS 3 fases: tarrina y film son INTERMEDIAS. Solo caja sería la final,
+  //   pero caja la maneja procesarRespuestaCaja (no llega a esta función). Así que
+  //   en práctica, si llega aquí con fase=tarrina|film es intermedia → NO guardamos.
+  //   El padre acumula los postMessages de las 3 fases y guarda 1 audit_log consolidado.
+  const esFaseIntermedia = verifyParams.fase === 'tarrina' || verifyParams.fase === 'film'
+
+  // 1. Guardar en Supabase audit_logs (solo si NO es fase intermedia)
   // fecha_produccion: si la URL trae fecha_produccion (etiqueta antigua) usamos esa;
   // si no, intentamos derivarla del fecha_envasado leído por el OCR.
   const fechaProduccionISO = verifyParams.fechaProduccion
@@ -798,30 +806,34 @@ const enviarResultadoVerificacion = async () => {
   const pxUsuarioParaDb = Number.isFinite(pxUsuarioNum) && payload.px_usuario !== ''
     ? pxUsuarioNum
     : null
-  try {
-    await supabase.from('audit_logs').insert([{
-      timestamp,
-      cliente: datos.cliente,
-      ean: datos.ean,
-      px_usuario: pxUsuarioParaDb,
-      estado: 'VERIFICADA',
-      detalles: payload,
-      fecha_produccion: fechaProduccionISO,
-      navegador: navigator.userAgent.substring(0, 100)
-    }])
-  } catch (e) {
-    console.warn('[VERIFY] Error guardando en audit_logs:', e)
-  }
+  if (!esFaseIntermedia) {
+    try {
+      await supabase.from('audit_logs').insert([{
+        timestamp,
+        cliente: datos.cliente,
+        ean: datos.ean,
+        px_usuario: pxUsuarioParaDb,
+        estado: 'VERIFICADA',
+        detalles: payload,
+        fecha_produccion: fechaProduccionISO,
+        navegador: navigator.userAgent.substring(0, 100)
+      }])
+    } catch (e) {
+      console.warn('[VERIFY] Error guardando en audit_logs:', e)
+    }
 
-  // 2. Enviar email instantáneo (no bloqueante)
-  try {
-    await fetch(webhookEmailEtiquetaUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-  } catch (e) {
-    console.warn('[VERIFY] Error enviando email:', e)
+    // 2. Enviar email instantáneo (no bloqueante) — solo en la fase FINAL
+    try {
+      await fetch(webhookEmailEtiquetaUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+    } catch (e) {
+      console.warn('[VERIFY] Error enviando email:', e)
+    }
+  } else {
+    console.log('[VERIFY] Fase intermedia ' + verifyParams.fase + ' — saltando audit_log + email. El padre los hará al final.')
   }
 
   // 3. postMessage al padre (Hoja de Fabricación) para que marque la fila en verde
