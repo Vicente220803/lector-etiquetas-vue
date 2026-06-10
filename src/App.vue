@@ -1751,9 +1751,11 @@ const compararBoteConOrden = (data) => {
 
     // En MODO NORMAL (etiqueta del día actual) usamos pxLeido tal como lo
     // calcula n8n a partir de fechas leídas en la etiqueta.
+    // EXCEPCIÓN: fase=tarrina no tiene P+X (etiqueta sin fechas).
     if (!verifyParams.fechaProduccion
         && verifyParams.px !== null
-        && data.validacion_px) {
+        && data.validacion_px
+        && verifyParams.fase !== 'tarrina') {
       const pxLeido = Number(data.validacion_px.px_leido)
       if (pxLeido !== verifyParams.px) {
         errores.push(`P+X no coincide. Etiqueta: P+${pxLeido} · Esperado: P+${verifyParams.px}`)
@@ -1764,7 +1766,10 @@ const compararBoteConOrden = (data) => {
     // la fuente de verdad. Recalculamos P+X como (caducidad OCR − fecha_produccion)
     // porque algunas etiquetas (p. ej. Del Monte coco) no llevan fecha_envasado
     // impresa, y entonces n8n rellena con la fecha de hoy y px_leido sale mal.
-    if (verifyParams.fechaProduccion) {
+    // EXCEPCIÓN: fase=tarrina (DELMONTE TACOS) — la etiqueta del culo solo lleva
+    // marca + EAN + origen, no tiene fechas ni P+X que validar. Las fechas se
+    // verifican en fase=film con su propio audit_log.
+    if (verifyParams.fechaProduccion && verifyParams.fase !== 'tarrina') {
       const env = parseFechaFlexible(verifyParams.fechaProduccion)
       // Caducidad puede venir sin año (ej. "25/05" en Del Monte coco). En ese
       // caso inferimos el año a partir de fecha_produccion.
