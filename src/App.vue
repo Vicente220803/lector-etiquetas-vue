@@ -788,11 +788,28 @@ const enviarResultadoVerificacion = async () => {
 
   // ¿Esta es la fase FINAL del flujo? Solo entonces guardamos audit_log y email.
   // - Flujo NORMAL (sin `fase`): es la única sesión → es la final.
-  // - Flujo TACOS 3 fases: tarrina y film son INTERMEDIAS. Solo caja sería la final,
-  //   pero caja la maneja procesarRespuestaCaja (no llega a esta función). Así que
-  //   en práctica, si llega aquí con fase=tarrina|film es intermedia → NO guardamos.
-  //   El padre acumula los postMessages de las 3 fases y guarda 1 audit_log consolidado.
+  // - Flujo TACOS 3 fases: tarrina y film son INTERMEDIAS. En vez de guardar audit_log,
+  //   apuntamos los datos en localStorage para que la fase caja construya el consolidado.
+  //   La fase caja la maneja procesarRespuestaCaja (no llega a esta función) y lee de
+  //   localStorage para guardar 1 solo audit_log con las 3 fases unidas.
   const esFaseIntermedia = verifyParams.fase === 'tarrina' || verifyParams.fase === 'film'
+
+  if (esFaseIntermedia && verifyParams.orderId) {
+    try {
+      const storageKey = `tacos_${verifyParams.orderId}_${verifyParams.fase}`
+      // Solo guardamos la foto y los datos OCR (no el payload entero, que dup
+      // foto en `film.foto_base64`). En fase=caja reconstruimos el consolidado.
+      const minimal = {
+        foto_base64: fotoBote,
+        datos: datos,
+        timestamp
+      }
+      localStorage.setItem(storageKey, JSON.stringify(minimal))
+      console.log('[VERIFY TACOS ' + verifyParams.fase.toUpperCase() + '] Datos acumulados en localStorage:', storageKey)
+    } catch (e) {
+      console.warn('[VERIFY] Error guardando en localStorage:', e)
+    }
+  }
 
   // 1. Guardar en Supabase audit_logs (solo si NO es fase intermedia)
   // fecha_produccion: si la URL trae fecha_produccion (etiqueta antigua) usamos esa;
@@ -1263,25 +1280,133 @@ const enviarAOCRCaja = async (file) => {
 const procesarRespuestaCaja = (data) => {
   if (!verifyMode.value || !verifyParams) return
 
-  // TACOS fase=caja: el iframe se abrió solo para esta foto, no tiene los
-  // datos del bote/film (esas fases fueron en sesiones de iframe anteriores).
-  // Enviamos verification-complete con la info de la caja en `data`.
-  // `next: null` indica al padre que es la última fase → cierra el iframe.
+  // TACOS fase=caja: el iframe se abrió solo para esta foto. Las fases anteriores
+  // (tarrina + film) dejaron sus datos en localStorage. Aquí los recogemos,
+  // construimos el payload consolidado y guardamos 1 audit_log final con todo:
+  // foto bote (tarrina) + foto film + foto caja + datos OCR de cada fase.
   if (verifyParams.fase === 'caja') {
-    const mensaje = {
-      source: 'lector-etiquetas',
-      type: 'verification-complete',
-      orderId: verifyParams.orderId,
-      fase: 'caja',
-      next: null,
-      result: 'ok',
-      data: JSON.parse(JSON.stringify(data))
+    const orderId = verifyParams.orderId
+    const keyTarrina = `tacos_${orderId}_tarrina`
+    const keyFilm = `tacos_${orderId}_film`
+    let tarrinaSaved = null
+    let filmSaved = null
+    try {
+      const t = localStorage.getItem(keyTarrina)
+      const f = localStorage.getItem(keyFilm)
+      tarrinaSaved = t ? JSON.parse(t) : null
+      filmSaved = f ? JSON.parse(f) : null
+    } catch (e) {
+      console.warn('[VERIFY TACOS CAJA] Error leyendo localStorage:', e)
     }
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage(mensaje, '*')
-      console.log('[VERIFY TACOS CAJA] verification-complete enviado al padre:', mensaje)
-    }
-    cajaResult.value = { ok: true, datos: data }
+
+    // payload consolidado: base = datos del FILM (que tiene fechas/lote/P+X),
+    // foto principal = bote (tarrina), film.foto_base64 = film, caja = datos+foto caja.
+    const fotoCaja = fileCaja.value ? fileCaja.value : null
+    const fotoCajaBase64Promise = fotoCaja
+      ? fileToBase64(fotoCaja).catch(() => null)
+      : Promise.resolve(null)
+
+    fotoCajaBase64Promise.then(async (fotoCajaB64) => {
+      const ahora = new Date()
+      const timestampFinal = ahora.toISOString()
+      const horaActual = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+      const datosTarrina = tarrinaSaved?.datos || {}
+      const datosFilm = filmSaved?.datos || {}
+
+      const payloadConsolidado = {
+        cliente: datosFilm.cliente || datosTarrina.cliente || null,
+        producto_db: datosFilm.producto_db || datosTarrina.producto_db || null,
+        origen: datosTarrina.origen || datosFilm.origen || null,
+        ean: datosTarrina.ean || datosFilm.ean || null,
+        ean_bd: datosTarrina.ean_bd || datosFilm.ean_bd || null,
+        ean_esperado_completo: datosTarrina.ean_esperado_completo || datosFilm.ean_esperado_completo || null,
+        dun: datosTarrina.dun || datosFilm.dun || null,
+        lote: datosFilm.lote || null,
+        codigo_r: datosFilm.codigo_r || datosTarrina.codigo_r || null,
+        fecha_envasado: datosFilm.fecha_envasado || null,
+        fecha_caducidad: datosFilm.fecha_caducidad || null,
+        precio_kg: datosFilm.precio_kg || datosTarrina.precio_kg || null,
+        peso_neto: datosFilm.peso_neto || datosTarrina.peso_neto || null,
+        importe: datosFilm.importe || datosTarrina.importe || null,
+        px_usuario: String(datosFilm.validacion_px?.px_leido || ''),
+        responsable: operarioVerificacion.value || 'Verificación automática (Hoja de Fabricación)',
+        hora_guardado: horaActual,
+        order_id: orderId,
+        // Foto principal = bote (tarrina, con barcode/EAN). El visor la pinta como 1ª.
+        foto_base64: tarrinaSaved?.foto_base64 || null,
+        // Foto film (la "cara") con fechas y lote.
+        film: filmSaved?.foto_base64 ? {
+          foto_base64: filmSaved.foto_base64
+        } : null,
+        // Foto caja + datos extraídos del OCR de la caja.
+        caja: {
+          cliente: data.cliente,
+          fecha_caducidad: data.fecha_caducidad,
+          datos_extraidos: data.datos_extraidos || {},
+          dun_leido_caja: data.datos_extraidos?.ean || null,
+          foto_base64: fotoCajaB64
+        }
+      }
+
+      // fecha_produccion ISO igual que en flujo normal
+      const fechaProduccionISO = verifyParams.fechaProduccion
+        || toIsoDate(parseFechaFlexible(payloadConsolidado.fecha_envasado))
+      const pxUsuarioNum = Number(payloadConsolidado.px_usuario)
+      const pxUsuarioParaDb = Number.isFinite(pxUsuarioNum) && payloadConsolidado.px_usuario !== ''
+        ? pxUsuarioNum
+        : null
+
+      // Guarda 1 audit_log consolidado
+      try {
+        await supabase.from('audit_logs').insert([{
+          timestamp: timestampFinal,
+          cliente: payloadConsolidado.cliente,
+          ean: payloadConsolidado.ean,
+          px_usuario: pxUsuarioParaDb,
+          estado: 'VERIFICADA',
+          detalles: payloadConsolidado,
+          fecha_produccion: fechaProduccionISO,
+          navegador: navigator.userAgent.substring(0, 100)
+        }])
+        console.log('[VERIFY TACOS CAJA] audit_log consolidado guardado para orden ' + orderId)
+      } catch (e) {
+        console.warn('[VERIFY TACOS CAJA] Error guardando audit_log consolidado:', e)
+      }
+
+      // Limpiamos localStorage para esa orden (no dejar restos)
+      try {
+        localStorage.removeItem(keyTarrina)
+        localStorage.removeItem(keyFilm)
+      } catch (e) { /* ignore */ }
+
+      // Email opcional (si existe webhook configurado)
+      try {
+        await fetch(webhookEmailEtiquetaUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payloadConsolidado)
+        })
+      } catch (e) {
+        console.warn('[VERIFY TACOS CAJA] Error enviando email:', e)
+      }
+
+      // postMessage al padre indicando que terminó la fase final
+      const mensaje = {
+        source: 'lector-etiquetas',
+        type: 'verification-complete',
+        orderId: orderId,
+        fase: 'caja',
+        next: null,
+        result: 'ok',
+        data: JSON.parse(JSON.stringify(payloadConsolidado))
+      }
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(mensaje, '*')
+        console.log('[VERIFY TACOS CAJA] verification-complete enviado al padre con payload consolidado')
+      }
+      cajaResult.value = { ok: true, datos: data }
+    })
     return
   }
 
