@@ -92,7 +92,8 @@
         </template>
 
         <!-- Estado 3a: Bote OK + EAN OK, esperando foto de la CAJA -->
-        <template v-else-if="verifyResult.ok && eanCoincide === true && verifyResult.datos?.etiqueta_de_caja === true && !cajaResult">
+        <!-- Solo aplica en flujo LEGACY (sin fase URL). En 3-fases TACOS la caja la abre el padre. -->
+        <template v-else-if="verifyResult.ok && eanCoincide === true && verifyResult.datos?.etiqueta_de_caja === true && !cajaResult && !verifyParams?.fase">
           <div class="verify-icon">
             <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><path d="M21 8l-9 4-9-4m18 0v8l-9 4-9-4V8m18 0L12 4 3 8" stroke="#1a365d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
@@ -101,6 +102,19 @@
           <p v-else class="verify-subtitle">Este producto requiere también etiqueta de caja. Haz la foto.</p>
           <div class="verify-info verify-info-ok">
             <div><b>Bote verificado:</b> ✅</div>
+            <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
+            <div><b>EAN:</b> {{ eanMostrado }}</div>
+          </div>
+        </template>
+
+        <!-- Estado tarrina/film verificada en 3-fases TACOS — esperando al padre -->
+        <template v-else-if="verifyResult.ok && eanCoincide === true && (verifyParams?.fase === 'tarrina' || verifyParams?.fase === 'film')">
+          <div class="verify-icon verify-icon-ok">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#38a169" stroke-width="2"/><path d="M8 12l3 3 5-6" stroke="#38a169" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h2 class="verify-title verify-title-ok">{{ verifyParams.fase === 'tarrina' ? 'TARRINA VERIFICADA' : 'FILM VERIFICADO' }}</h2>
+          <p class="verify-subtitle">{{ verifyParams.fase === 'tarrina' ? 'Esperando siguiente fase (FILM)' : 'Esperando siguiente fase (CAJA)' }}</p>
+          <div class="verify-info verify-info-ok">
             <div><b>Cliente:</b> {{ verifyResult.datos.cliente }}</div>
             <div><b>EAN:</b> {{ eanMostrado }}</div>
           </div>
