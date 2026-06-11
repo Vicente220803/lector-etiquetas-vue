@@ -1893,13 +1893,22 @@ const compararBoteConOrden = (data) => {
       return
     }
 
+    // ¿Estamos procesando la etiqueta del culo de TACOS sin tener `fase` explícita?
+    // Caso típico: "Verificar etiqueta otro día" donde no hay orquestación 3 fases —
+    // se mete el culo de TACOS como bote, no trae fechas/lote y la validación normal
+    // revienta. Detectamos heurísticamente por: producto TACOS + fechas N/A.
+    const esTarrinaImplicita = !verifyParams.fase
+      && /TACOS/i.test(String(data.producto_db || ''))
+      && (data.fecha_caducidad === 'N/A' || !data.fecha_caducidad)
+    const esTarrina = verifyParams.fase === 'tarrina' || esTarrinaImplicita
+
     // En MODO NORMAL (etiqueta del día actual) usamos pxLeido tal como lo
     // calcula n8n a partir de fechas leídas en la etiqueta.
-    // EXCEPCIÓN: fase=tarrina no tiene P+X (etiqueta sin fechas).
+    // EXCEPCIÓN: tarrina no tiene P+X (etiqueta sin fechas).
     if (!verifyParams.fechaProduccion
         && verifyParams.px !== null
         && data.validacion_px
-        && verifyParams.fase !== 'tarrina') {
+        && !esTarrina) {
       const pxLeido = Number(data.validacion_px.px_leido)
       if (pxLeido !== verifyParams.px) {
         errores.push(`P+X no coincide. Etiqueta: P+${pxLeido} · Esperado: P+${verifyParams.px}`)
@@ -1910,10 +1919,10 @@ const compararBoteConOrden = (data) => {
     // la fuente de verdad. Recalculamos P+X como (caducidad OCR − fecha_produccion)
     // porque algunas etiquetas (p. ej. Del Monte coco) no llevan fecha_envasado
     // impresa, y entonces n8n rellena con la fecha de hoy y px_leido sale mal.
-    // EXCEPCIÓN: fase=tarrina (DELMONTE TACOS) — la etiqueta del culo solo lleva
-    // marca + EAN + origen, no tiene fechas ni P+X que validar. Las fechas se
-    // verifican en fase=film con su propio audit_log.
-    if (verifyParams.fechaProduccion && verifyParams.fase !== 'tarrina') {
+    // EXCEPCIÓN: tarrina (DELMONTE TACOS culo) — la etiqueta solo lleva marca +
+    // EAN + origen, no tiene fechas ni P+X que validar. Las fechas se verifican
+    // en la siguiente foto (film/marcado film).
+    if (verifyParams.fechaProduccion && !esTarrina) {
       const env = parseFechaFlexible(verifyParams.fechaProduccion)
       // Caducidad puede venir sin año (ej. "25/05" en Del Monte coco). En ese
       // caso inferimos el año a partir de fecha_produccion.
