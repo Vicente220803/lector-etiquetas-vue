@@ -1351,14 +1351,21 @@ const procesarRespuestaCaja = (data) => {
         peso_neto: datosFilm.peso_neto || datosTarrina.peso_neto || null,
         importe: datosFilm.importe || datosTarrina.importe || null,
         px_usuario: String(datosFilm.validacion_px?.px_leido || ''),
+        // Mantenemos validacion_px a nivel top también (para flujos legacy del visor)
+        validacion_px: datosFilm.validacion_px || null,
         responsable: operarioVerificacion.value || 'Verificación automática (Hoja de Fabricación)',
         hora_guardado: horaActual,
         order_id: orderId,
         // Foto principal = bote (tarrina, con barcode/EAN). El visor la pinta como 1ª.
         foto_base64: tarrinaSaved?.foto_base64 || null,
-        // Foto film (la "cara") con fechas y lote.
+        // Foto film (la "cara") con fechas y lote. Incluimos validacion_px aquí
+        // también porque el visor del compa puede leerlo desde detalles.film.
         film: filmSaved?.foto_base64 ? {
-          foto_base64: filmSaved.foto_base64
+          foto_base64: filmSaved.foto_base64,
+          validacion_px: datosFilm.validacion_px || null,
+          lote: datosFilm.lote || null,
+          fecha_envasado: datosFilm.fecha_envasado || null,
+          fecha_caducidad: datosFilm.fecha_caducidad || null
         } : null,
         // Foto caja + datos extraídos del OCR de la caja.
         caja: {
