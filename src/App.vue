@@ -1057,9 +1057,9 @@ const diaJuliano = computed(() => {
     ? parseFechaFlexible(verifyParams.fechaProduccion)
     : null
   const d = dRef || new Date()
-  const start = new Date(d.getFullYear(), 0, 0)
-  const diff = d - start
-  return Math.floor(diff / 86400000)
+  const utcHoy = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())
+  const utcInicio = Date.UTC(d.getFullYear(), 0, 0)
+  return Math.floor((utcHoy - utcInicio) / 86400000)
 })
 
 // Lote esperado para etiquetas de coco hechas HOY: "001" + día juliano (3 dígitos)
