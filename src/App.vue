@@ -743,9 +743,10 @@ const enviarResultadoVerificacion = async () => {
   // Flujo tacos: exigir que el frontal también esté verificado OK antes de cerrar
   if (verifyParams.flujoTacos && !frontalResult.value?.ok) return
   // Si el producto requiere caja, exigir que la caja también esté verificada OK.
-  // Excepto en fase=film del flujo 3-fases: la caja es una sesión separada que
-  // abre el padre tras recibir el postMessage, no aquí.
-  if (verifyResult.value.datos?.etiqueta_de_caja === true && !cajaResult.value?.ok && verifyParams?.fase !== 'film') return
+  // Excepto en flujo 3-fases (cualquier fase): la caja es una sesión separada que
+  // abre el padre tras recibir el postMessage. Solo el flujo legacy (sin `fase`)
+  // verifica la caja en la misma sesión que el bote.
+  if (verifyResult.value.datos?.etiqueta_de_caja === true && !cajaResult.value?.ok && !verifyParams?.fase) return
   resultadoEnviado.value = true
 
   // En flujo tacos, los datos vienen partidos: cliente/EAN/origen del culo,
