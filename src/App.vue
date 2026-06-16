@@ -1335,6 +1335,20 @@ const procesarRespuestaCaja = (data) => {
     const datosFilmPre = filmSaved?.datos || {}
     const erroresCaja = []
 
+    // Safety net: si faltan datos de fases previas (p.ej. el usuario reabrió la
+    // fase=caja después de que el localStorage se limpiara), abortar antes de
+    // guardar un audit_log incompleto. Que el padre vuelva a abrir desde tarrina.
+    if (!tarrinaSaved || !filmSaved) {
+      const faltan = []
+      if (!tarrinaSaved) faltan.push('tarrina')
+      if (!filmSaved) faltan.push('film')
+      erroresCaja.push(`Faltan datos de fases previas (${faltan.join(', ')}). Reinicia desde la tarrina.`)
+      verifyResult.value = { ok: true, datos: datosTarrinaPre }
+      cajaResult.value = { ok: false, errores: erroresCaja }
+      console.warn('[VERIFY TACOS CAJA] Abortado: localStorage incompleto. tarrina=' + !!tarrinaSaved + ' film=' + !!filmSaved)
+      return
+    }
+
     const matchea = (a, b) => a && b && (a.includes(b) || b.includes(a))
     const clienteCaja = (data.cliente || '').toUpperCase().trim()
     const clienteEsperado = (verifyParams.cliente || '').toUpperCase().trim()
