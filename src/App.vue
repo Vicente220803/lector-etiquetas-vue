@@ -253,13 +253,13 @@
           >
             🥥 COCO
           </button>
-        </div>
+        </div>                
         <button class="btn-finalizar-turno-header" @click="showConfirmFinalizar = true">
           FINALIZAR TURNO ({{ registrosTurno.length }})
         </button>
       </div>
     </header>
-
+                  
     <!-- MAIN FORM -->
     <div class="form-panel">
       <!-- ROW 1: Responsable, Producto, P+X, Fecha Envasado -->
