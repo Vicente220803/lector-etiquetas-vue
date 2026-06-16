@@ -742,8 +742,10 @@ const enviarResultadoVerificacion = async () => {
   if (!verifyMode.value || !verifyResult.value?.ok || eanCoincide.value !== true) return
   // Flujo tacos: exigir que el frontal también esté verificado OK antes de cerrar
   if (verifyParams.flujoTacos && !frontalResult.value?.ok) return
-  // Si el producto requiere caja, exigir que la caja también esté verificada OK
-  if (verifyResult.value.datos?.etiqueta_de_caja === true && !cajaResult.value?.ok) return
+  // Si el producto requiere caja, exigir que la caja también esté verificada OK.
+  // Excepto en fase=film del flujo 3-fases: la caja es una sesión separada que
+  // abre el padre tras recibir el postMessage, no aquí.
+  if (verifyResult.value.datos?.etiqueta_de_caja === true && !cajaResult.value?.ok && verifyParams?.fase !== 'film') return
   resultadoEnviado.value = true
 
   // En flujo tacos, los datos vienen partidos: cliente/EAN/origen del culo,
@@ -1138,6 +1140,10 @@ watch(eanCoincide, (val) => {
 // Flujo tacos: cuando el frontal termina OK → pasar a la fase caja (o cerrar si no hay caja)
 watch(frontalResult, (val) => {
   if (!verifyMode.value || !val?.ok) return
+  // Fase=film del flujo 3-fases: el padre abrirá la siguiente sesión (caja) tras
+  // recibir el postMessage que ya dispara el watch(eanCoincide) → enviarResultadoVerificacion.
+  // No abrimos la cámara caja aquí porque es otra sesión del iframe.
+  if (verifyParams?.fase === 'film') return
   pidiendoFrontal.value = false
   if (verifyResult.value?.datos?.etiqueta_de_caja === true) {
     pidiendoCaja.value = true
@@ -1266,7 +1272,7 @@ const handleImageCaptured = (file) => {
   // - fase === 'caja': flujo TACOS, la fase 3 va directamente al webhook de caja
   if (pidiendoCaja.value || verifyParams?.fase === 'caja') {
     enviarAOCRCaja(file)
-  } else if (pidiendoFrontal.value) {
+  } else if (pidiendoFrontal.value || verifyParams?.fase === 'film') {
     enviarAOCRFrontal(file)
   } else {
     enviarAOCR(file)
@@ -1616,6 +1622,29 @@ const procesarRespuestaFrontal = (data) => {
     : { ok: false, errores }
 
   console.log('[VERIFY FRONTAL] Resultado:', frontalResult.value)
+
+  // Fase=film en flujo 3-fases: la sesión es independiente (sin verifyResult del
+  // workflow piña). Simulamos verifyResult mezclando los datos de la tarrina
+  // previa (localStorage) con los del frontal para que el flujo de envío al
+  // padre funcione igual que en tarrina/caja.
+  if (errores.length === 0 && verifyParams?.fase === 'film') {
+    let tarrinaData = null
+    try {
+      const stored = localStorage.getItem(`tacos_${verifyParams.orderId}_tarrina`)
+      if (stored) tarrinaData = JSON.parse(stored).datos
+    } catch (e) {
+      console.warn('[VERIFY FILM] No se pudo leer tarrina del localStorage', e)
+    }
+    verifyResult.value = {
+      ok: true,
+      datos: {
+        ...(tarrinaData || {}),
+        producto_db: data.producto || tarrinaData?.producto_db,
+        lote: data.lote,
+        fecha_caducidad: data.fecha_caducidad
+      }
+    }
+  }
 }
 
 const reintentarFrontal = () => {
