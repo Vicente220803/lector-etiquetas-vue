@@ -1625,6 +1625,11 @@ const enviarAOCRFrontal = async (file) => {
 
   const formDataSend = new FormData()
   formDataSend.append('file', file)
+  // Pasamos contexto de la orden para que el workflow pueda calcular P+X y
+  // normalizar fechas (igual que hace el workflow piña).
+  if (verifyParams?.cliente) formDataSend.append('cliente', verifyParams.cliente)
+  if (verifyParams?.fase) formDataSend.append('fase', verifyParams.fase)
+  if (verifyParams?.fechaProduccion) formDataSend.append('fecha_produccion', verifyParams.fechaProduccion)
 
   try {
     const response = await fetch(webhookTacosFrontalUrl, {
