@@ -1644,6 +1644,10 @@ const procesarRespuestaFrontal = (data) => {
         fecha_caducidad: data.fecha_caducidad
       }
     }
+    // eanCoincide ya era true al montar el iframe (lo devuelve directamente
+    // para fase=film/caja), así que el watch(eanCoincide) NO dispara al cambiar
+    // verifyResult.value. Llamamos enviarResultadoVerificacion manualmente.
+    enviarResultadoVerificacion()
   }
 }
 
@@ -1859,13 +1863,11 @@ const compararBoteConOrden = (data) => {
   const errores = []
 
   // === EXCEPCIÓN TEMPORAL: Del Monte Piña Tacos 400g ===
-  // Bypass que solo aplica si la Hoja de Fabricación NO ha activado el nuevo
-  // flujo de 2 fotos (flujo_tacos). Cuando flujo_tacos está activo, queremos
-  // la validación completa culo+frontal y este bloque no debe ejecutarse.
-  // QUITAR esta isla cuando flujo_tacos esté en producción para todas las
-  // órdenes Del Monte Tacos.
+  // Bypass legacy (single-session) — NO aplica al flujo 3-fases (URL con
+  // `fase=tarrina|film|caja`) porque la orquestación ya es secuencial.
+  // QUITAR esta isla cuando todo TACOS pase por 3-fases.
   const eanLeidoBote = String(data.ean || '').replace(/\s+/g, '')
-  if (!verifyParams.flujoTacos && eanLeidoBote.startsWith('872109893331')) {
+  if (!verifyParams.flujoTacos && !verifyParams.fase && eanLeidoBote.startsWith('872109893331')) {
     const origenOK = /costa\s*rica/i.test(String(data.origen || ''))
     if (!origenOK) {
       verifyResult.value = {
