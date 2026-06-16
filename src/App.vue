@@ -1245,7 +1245,7 @@ const handleImageCaptured = (file) => {
   capturedImageFile = file
 
   // Guardar el File en la ref correcta según la fase
-  if (pidiendoCaja.value) {
+  if (pidiendoCaja.value || verifyParams?.fase === 'caja') {
     fileCaja.value = file  // foto de la caja
   } else if (pidiendoFrontal.value) {
     fileFrontal.value = file  // foto del frontal (flujo tacos)
@@ -1325,6 +1325,67 @@ const procesarRespuestaCaja = (data) => {
       filmSaved = f ? JSON.parse(f) : null
     } catch (e) {
       console.warn('[VERIFY TACOS CAJA] Error leyendo localStorage:', e)
+    }
+
+    // === VALIDACIÓN caja vs film/tarrina (TACOS 3-fases) ===
+    // En la fase final validamos que la caja corresponda al producto fotografiado
+    // en las fases anteriores (mismo cliente, lote, fecha, DUN). Si falla → mostrar
+    // modal de error y permitir reintento, NO guardar audit_log.
+    const datosTarrinaPre = tarrinaSaved?.datos || {}
+    const datosFilmPre = filmSaved?.datos || {}
+    const erroresCaja = []
+
+    const matchea = (a, b) => a && b && (a.includes(b) || b.includes(a))
+    const clienteCaja = (data.cliente || '').toUpperCase().trim()
+    const clienteEsperado = (verifyParams.cliente || '').toUpperCase().trim()
+    const clienteTarrina = (datosTarrinaPre.cliente || '').toUpperCase().trim()
+    if (!clienteCaja || clienteCaja === 'OTROS') {
+      erroresCaja.push('No se detectó cliente en la caja')
+    } else if (!matchea(clienteCaja, clienteEsperado) && !matchea(clienteCaja, clienteTarrina)) {
+      erroresCaja.push(`Cliente caja no coincide. Caja: ${data.cliente || '—'} · Esperado: ${verifyParams.cliente}`)
+    }
+
+    // Lote caja vs lote film (acepta prefijo o coincidencia del día juliano)
+    const loteCajaRaw = data.datos_extraidos?.lote
+    const loteFilm = datosFilmPre.lote
+    if (loteCajaRaw && loteCajaRaw !== 'No detectado' && loteFilm && loteFilm !== 'No detectado') {
+      const normLote = (l) => String(l || '').replace(/\s+/g, '').trim()
+      const a = normLote(loteCajaRaw)
+      const b = normLote(loteFilm)
+      const sufijoJuliano = (s) => /^\d{3,}$/.test(s) ? s.slice(-3) : ''
+      const coincidePrefijo = a && b && (a === b || a.startsWith(b) || b.startsWith(a))
+      const coincideJuliano = sufijoJuliano(a) && sufijoJuliano(a) === sufijoJuliano(b)
+      if (!coincidePrefijo && !coincideJuliano) {
+        erroresCaja.push(`Lote caja no coincide con film. Caja: ${loteCajaRaw} · Film: ${loteFilm}`)
+      }
+    }
+
+    // Fecha caducidad caja vs film (comparamos solo DD/MM por si la del film viene sin año)
+    if (data.fecha_caducidad && data.fecha_caducidad !== 'No detectado' && datosFilmPre.fecha_caducidad) {
+      const ddmm = (f) => String(f || '').replace(/[.\-]/g, '/').trim().substring(0, 5)
+      const fc = ddmm(data.fecha_caducidad)
+      const ff = ddmm(datosFilmPre.fecha_caducidad)
+      if (fc && ff && fc !== ff) {
+        erroresCaja.push(`Fecha caducidad caja no coincide con film. Caja: ${data.fecha_caducidad} · Film: ${datosFilmPre.fecha_caducidad}`)
+      }
+    }
+
+    // DUN caja vs DUN del producto (de la tarrina, que vino del workflow piña con BD)
+    const dunCajaRaw = data.datos_extraidos?.ean
+    const dunBote = datosTarrinaPre.dun
+    if (dunBote && dunCajaRaw && dunCajaRaw !== 'No detectado') {
+      const norm = (s) => String(s || '').replace(/\s+/g, '').trim()
+      if (norm(dunCajaRaw) !== norm(dunBote)) {
+        erroresCaja.push(`DUN caja no coincide. Caja: ${dunCajaRaw} · Esperado: ${dunBote}`)
+      }
+    }
+
+    if (erroresCaja.length > 0) {
+      // Simulamos verifyResult para que el template "CAJA NO COINCIDE" se renderice.
+      verifyResult.value = { ok: true, datos: datosTarrinaPre }
+      cajaResult.value = { ok: false, errores: erroresCaja }
+      console.log('[VERIFY TACOS CAJA] Validación fallida:', erroresCaja)
+      return
     }
 
     // payload consolidado: base = datos del FILM (que tiene fechas/lote/P+X),
