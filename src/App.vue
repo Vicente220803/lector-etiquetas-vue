@@ -645,17 +645,6 @@ onMounted(() => {
   window.addEventListener('beforeunload', handleBeforeUnload)
 })
 
-// Cuando el operario se selecciona, lo guardamos en localStorage para que las
-// siguientes sesiones del iframe de la MISMA orden no vuelvan a pedirlo.
-// Se limpia al finalizar el flujo de la orden (audit_log final guardado).
-watch(operarioVerificacion, (val) => {
-  if (val && verifyMode.value && verifyParams?.orderId) {
-    try {
-      localStorage.setItem(`operario_${verifyParams.orderId}`, val)
-    } catch (e) { /* ignore */ }
-  }
-})
-
 onUnmounted(() => {
   window.removeEventListener('beforeunload', handleBeforeUnload)
 })
@@ -1024,6 +1013,18 @@ cargarOperarios()
 
 // --- VERIFY MODE: operario que está verificando (se pregunta cada vez que se abre el iframe) ---
 const operarioVerificacion = ref('')
+
+// Persistencia del operario por orderId: cuando se selecciona uno, lo guardamos
+// en localStorage para que las siguientes sesiones del iframe de la MISMA orden
+// no lo vuelvan a pedir. La declaración del ref tiene que existir antes de este
+// watch (si no, TDZ en producción reventaba setup → modal en blanco).
+watch(operarioVerificacion, (val) => {
+  if (val && verifyMode.value && verifyParams?.orderId) {
+    try {
+      localStorage.setItem(`operario_${verifyParams.orderId}`, val)
+    } catch (e) { /* ignore */ }
+  }
+})
 
 // --- COMPUTED ---
 const fechaHoy = new Date()
