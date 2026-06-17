@@ -786,7 +786,12 @@ const enviarResultadoVerificacion = async () => {
     cliente: datos.cliente,
     producto_db: datosFrontal?.producto || datos.producto_db,
     origen: datos.origen,
-    ean: datos.ean,
+    // EAN guardado: priorizamos el "verdadero" del producto (construido o BD)
+    // sobre el OCR, para que el audit_log no quede con un EAN parcial cuando la
+    // pistola ya validó el correcto. Fallback al OCR si no hay BD.
+    ean: (datos.ean_esperado_completo && String(datos.ean_esperado_completo).trim())
+      || (datos.ean_bd && String(datos.ean_bd).trim().length >= 12 ? String(datos.ean_bd).trim() : null)
+      || datos.ean,
     // Trazabilidad de la comparación EAN: registramos qué valor de BD se usó
     // como referencia (BD fijo o construido por peso/importe). El campo `ean`
     // de arriba es el leído por OCR; estos dos son los de la fuente de verdad.
@@ -872,7 +877,7 @@ const enviarResultadoVerificacion = async () => {
       await supabase.from('audit_logs').insert([{
         timestamp,
         cliente: datos.cliente,
-        ean: datos.ean,
+        ean: payload.ean,
         px_usuario: pxUsuarioParaDb,
         estado: 'VERIFICADA',
         detalles: payload,
@@ -1446,7 +1451,12 @@ const procesarRespuestaCaja = (data) => {
         cliente: datosFilm.cliente || datosTarrina.cliente || null,
         producto_db: datosFilm.producto_db || datosTarrina.producto_db || null,
         origen: datosTarrina.origen || datosFilm.origen || null,
-        ean: datosTarrina.ean || datosFilm.ean || null,
+        // Mismo criterio que el flujo normal: priorizamos el EAN "verdadero"
+        // del producto sobre el OCR de la tarrina, que con TACOS suele venir
+        // parcial (el barcode del culo no siempre se lee entero).
+        ean: (datosTarrina.ean_esperado_completo && String(datosTarrina.ean_esperado_completo).trim())
+          || (datosTarrina.ean_bd && String(datosTarrina.ean_bd).trim().length >= 12 ? String(datosTarrina.ean_bd).trim() : null)
+          || datosTarrina.ean || datosFilm.ean || null,
         ean_bd: datosTarrina.ean_bd || datosFilm.ean_bd || null,
         ean_esperado_completo: datosTarrina.ean_esperado_completo || datosFilm.ean_esperado_completo || null,
         dun: datosTarrina.dun || datosFilm.dun || null,
