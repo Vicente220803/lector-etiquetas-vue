@@ -1760,7 +1760,15 @@ const procesarRespuestaFrontal = (data) => {
         ...(tarrinaData || {}),
         producto_db: data.producto || tarrinaData?.producto_db,
         lote: data.lote,
-        fecha_caducidad: data.fecha_caducidad
+        fecha_caducidad: data.fecha_caducidad,
+        // El workflow tacos-frontal SÍ calcula estos (la tarrina no, devuelve
+        // 'OK (etiqueta tarrina)' con px_leido=0 y peso_neto "0.000 Kg").
+        // Sin esto, el audit_log consolidado guarda los del bote y pierde la
+        // info real de la cara del film.
+        peso_neto: data.peso_neto || tarrinaData?.peso_neto,
+        validacion_px: data.validacion_px || tarrinaData?.validacion_px,
+        linea_produccion: data.linea_produccion ?? tarrinaData?.linea_produccion,
+        dia_juliano_lote: data.dia_juliano_lote ?? tarrinaData?.dia_juliano_lote
       }
     }
     // eanCoincide ya era true al montar el iframe (lo devuelve directamente
