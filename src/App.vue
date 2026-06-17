@@ -628,12 +628,32 @@ onMounted(() => {
     if (verifyParams.modoProducto === 'coco') {
       modoProducto.value = 'coco'
     }
+    // Persistencia del operario por orderId: si ya se seleccionó en una sesión
+    // previa de la misma orden (p.ej. TACOS 3-fases o reaperturas), recuperarlo
+    // del localStorage para no pedirlo otra vez al operario.
+    if (verifyParams.orderId) {
+      try {
+        const op = localStorage.getItem(`operario_${verifyParams.orderId}`)
+        if (op) operarioVerificacion.value = op
+      } catch (e) { /* ignore */ }
+    }
     showCamera.value = true
     if (verifyParams.autoMode) {
       window.addEventListener('message', handleParentMessage)
     }
   }
   window.addEventListener('beforeunload', handleBeforeUnload)
+})
+
+// Cuando el operario se selecciona, lo guardamos en localStorage para que las
+// siguientes sesiones del iframe de la MISMA orden no vuelvan a pedirlo.
+// Se limpia al finalizar el flujo de la orden (audit_log final guardado).
+watch(operarioVerificacion, (val) => {
+  if (val && verifyMode.value && verifyParams?.orderId) {
+    try {
+      localStorage.setItem(`operario_${verifyParams.orderId}`, val)
+    } catch (e) { /* ignore */ }
+  }
 })
 
 onUnmounted(() => {
@@ -861,6 +881,11 @@ const enviarResultadoVerificacion = async () => {
       }])
     } catch (e) {
       console.warn('[VERIFY] Error guardando en audit_logs:', e)
+    }
+    // Flujo completado para esta orden → limpiar el operario del localStorage.
+    // (Las fases intermedias TACOS no entran aquí, no se limpia hasta fase=caja.)
+    if (verifyParams.orderId) {
+      try { localStorage.removeItem(`operario_${verifyParams.orderId}`) } catch (e) { /* ignore */ }
     }
 
     // 2. Enviar email instantáneo (no bloqueante) — solo en la fase FINAL
@@ -1484,10 +1509,12 @@ const procesarRespuestaCaja = (data) => {
         console.warn('[VERIFY TACOS CAJA] Error guardando audit_log consolidado:', e)
       }
 
-      // Limpiamos localStorage para esa orden (no dejar restos)
+      // Limpiamos localStorage para esa orden (no dejar restos): datos de fases
+      // intermedias + operario persistido entre sesiones.
       try {
         localStorage.removeItem(keyTarrina)
         localStorage.removeItem(keyFilm)
+        localStorage.removeItem(`operario_${orderId}`)
       } catch (e) { /* ignore */ }
 
       // Email opcional (si existe webhook configurado)
