@@ -1561,7 +1561,7 @@ const procesarRespuestaCaja = (data) => {
   const errores = []
 
   if (data.bloqueo_ia || data.cliente === 'REINTENTAR') {
-    errores.push('La IA no pudo procesar la imagen de la caja. Vuelve a hacer la foto.')
+    errores.push(data.mensaje_error || 'La IA no pudo procesar la imagen de la caja. Vuelve a hacer la foto.')
   } else {
     // Comparar cliente FLEXIBLE — acepta match contra:
     //  · cliente URL  (caso normal)
@@ -1698,7 +1698,7 @@ const procesarRespuestaFrontal = (data) => {
   const errores = []
 
   if (data.bloqueo_ia || data.cliente === 'REINTENTAR') {
-    errores.push('La IA no pudo procesar la imagen frontal. Vuelve a hacer la foto.')
+    errores.push(data.mensaje_error || 'La IA no pudo procesar la imagen frontal. Vuelve a hacer la foto.')
   } else {
     // Sanity: el producto debería decir "piña troceada"
     const producto = String(data.producto || '').toLowerCase()
@@ -2015,7 +2015,7 @@ const compararBoteConOrden = (data) => {
   }
 
   if (data.bloqueo_ia || data.cliente === 'REINTENTAR') {
-    errores.push('La IA no pudo procesar la imagen. Vuelve a hacer la foto.')
+    errores.push(data.mensaje_error || 'La IA no pudo procesar la imagen. Vuelve a hacer la foto.')
   } else {
     // Comparar cliente FLEXIBLE (uno contiene al otro) — acepta también cliente_alias
     // Ej1: OCR detecta "ALDI", la orden dice "ALDI SAGUNTO" → coinciden (substring)
