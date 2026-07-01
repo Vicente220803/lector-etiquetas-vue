@@ -557,6 +557,10 @@ const verifyParams = (() => {
     autoMode: mode === 'verify-auto',
     modoProducto: params.get('modo_producto') || 'pina',
     cliente: params.get('cliente') || '',
+    // Nombre_sap del producto de la orden. Lo reenviamos al workflow piña/coco
+    // como autoridad para bloquear bote equivocado dentro del mismo cliente
+    // (p.ej. LIDL PRP vs LIDL Chef Select).
+    producto: params.get('producto') || '',
     px: params.get('px') ? Number(params.get('px')) : null,
     fechaCad: params.get('fecha_cad') || '',
     fechaProduccion: params.get('fecha_produccion') || '',
@@ -668,6 +672,7 @@ const handleParentMessage = (event) => {
   if (msg.type === 'order-matched' && msg.order) {
     // Actualizar verifyParams con los datos de la orden encontrada
     verifyParams.cliente = msg.order.cliente || ''
+    verifyParams.producto = msg.order.producto || ''
     verifyParams.px = msg.order.px ?? null
     verifyParams.fechaCad = msg.order.fecha_cad || ''
     verifyParams.orderId = String(msg.order.id || '')
@@ -1666,6 +1671,7 @@ const enviarAOCRFrontal = async (file) => {
   // Pasamos contexto de la orden para que el workflow pueda calcular P+X y
   // normalizar fechas (igual que hace el workflow piña).
   if (verifyParams?.cliente) formDataSend.append('cliente', verifyParams.cliente)
+  if (verifyParams?.producto) formDataSend.append('producto', verifyParams.producto)
   if (verifyParams?.fase) formDataSend.append('fase', verifyParams.fase)
   if (verifyParams?.fechaProduccion) formDataSend.append('fecha_produccion', verifyParams.fechaProduccion)
 
@@ -1874,6 +1880,13 @@ const enviarAOCR = async (file) => {
   // como MASKOMO piña/coco que comparten prefijo EAN).
   if (verifyParams?.cliente) {
     formDataSend.append('cliente', verifyParams.cliente)
+  }
+  // Nombre_sap del producto de la orden. El workflow lo compara con el que él
+  // mismo identifica del bote; si difieren → bloquea "BOTE EQUIVOCADO".
+  // Cubre el hueco de bote equivocado dentro del mismo cliente (LIDL PRP vs
+  // LIDL Chef Select, DELMONTE cilindro vs TACOS, etc.).
+  if (verifyParams?.producto) {
+    formDataSend.append('producto', verifyParams.producto)
   }
   // Verify mode: fecha de la orden (formato YYYY-MM-DD) como referencia real
   // de envasado. El workflow la usa como dReferencia para calcular P+X y
