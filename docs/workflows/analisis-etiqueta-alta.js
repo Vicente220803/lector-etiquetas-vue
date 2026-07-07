@@ -190,7 +190,8 @@ comparaciones.push({
   estado: estadoComparacion(prefijoRellenado, prefijoDetectado)
 });
 
-// Tipo EAN
+// Tipo EAN — compara equivalencias conceptuales entre BD (texto libre) y IA (enum).
+// Ej: "No contiene" (BD) ≡ "sin_ean" (IA), "Peso variable" ≡ "variable_peso_9_3_1", etc.
 comparaciones.push({
   campo: "tipo_codigo_ean",
   valor_rellenado: productoRellenado.tipo_codigo_ean,
@@ -199,6 +200,15 @@ comparaciones.push({
     const rel = String(productoRellenado.tipo_codigo_ean || "").toLowerCase();
     const det = String(detectado.tipo_ean || "").toLowerCase();
     if (!rel && !det) return "OK";
+    // Equivalencia "sin EAN"
+    const relSinEan = rel.includes("no contiene") || rel.includes("sin ean") || rel.includes("sin_ean");
+    const detSinEan = det === "sin_ean";
+    if (relSinEan && detSinEan) return "OK";
+    // Equivalencia variable precio
+    if ((rel.includes("variable precio") || rel.includes("variable_precio")) && det === "variable_precio_9_3_1") return "OK";
+    // Equivalencia variable peso (ALDI)
+    if ((rel.includes("variable peso") || rel.includes("variable_peso")) && det === "variable_peso_9_3_1") return "OK";
+    // Generales (por si en BD queda solo "Variable" o "Fijo" sin especificar)
     if (rel.includes("variable") && det.includes("variable")) return "OK";
     if (rel.includes("fijo") && det.includes("fijo")) return "OK";
     if (rel === det) return "OK";
@@ -207,23 +217,28 @@ comparaciones.push({
 });
 
 // Gramaje: solo debería estar rellenado si es peso fijo
+const gramajeDetectado = (() => {
+  // Si es variable precio, gramaje suele ser null (cada bote pesa distinto)
+  if (String(detectado.tipo_ean || "").startsWith("variable")) return null;
+  // Si es fijo, deducir del peso_neto detectado
+  if (detectado.peso_neto) {
+    const m = String(detectado.peso_neto).match(/(\d+(?:[,.]\d+)?)\s*Kg/i);
+    if (m) return Math.round(parseFloat(m[1].replace(',', '.')) * 1000);
+  }
+  return null;
+})();
 comparaciones.push({
   campo: "gramaje_peso_fijo",
   valor_rellenado: productoRellenado.gramaje_peso_fijo,
-  valor_detectado: (() => {
-    // Si es variable precio, gramaje suele ser null (cada bote pesa distinto)
-    if (String(detectado.tipo_ean || "").startsWith("variable")) return null;
-    // Si es fijo, deducir del peso_neto detectado
-    if (detectado.peso_neto) {
-      const m = String(detectado.peso_neto).match(/(\d+(?:[,.]\d+)?)\s*Kg/i);
-      if (m) return Math.round(parseFloat(m[1].replace(',', '.')) * 1000);
-    }
-    return null;
-  })(),
+  valor_detectado: gramajeDetectado,
   estado: (() => {
     const esVariable = String(detectado.tipo_ean || "").startsWith("variable");
-    if (esVariable && !productoRellenado.gramaje_peso_fijo) return "OK (variable precio)";
-    if (esVariable && productoRellenado.gramaje_peso_fijo) return "REVISAR (variable no lleva gramaje)";
+    const esSinEan = detectado.tipo_ean === "sin_ean";
+    const relTieneValor = productoRellenado.gramaje_peso_fijo !== null && productoRellenado.gramaje_peso_fijo !== undefined;
+    if (esVariable && !relTieneValor) return "OK (variable precio)";
+    if (esVariable && relTieneValor) return "REVISAR (variable no lleva gramaje)";
+    if (esSinEan && relTieneValor && !gramajeDetectado) return "OK (etiqueta no muestra peso, valor tomado de BD)";
+    if (relTieneValor && gramajeDetectado && Number(productoRellenado.gramaje_peso_fijo) !== Number(gramajeDetectado)) return "DIFIERE";
     return "OK";
   })()
 });
@@ -233,7 +248,9 @@ comparaciones.push({
   campo: "codigo_r_visible",
   valor_rellenado: null,
   valor_detectado: detectado.codigo_r_visible,
-  estado: detectado.codigo_r_visible ? "REVISAR (¿obligatorio para este cliente?)" : "OK"
+  estado: detectado.codigo_r_visible
+    ? (clienteRellenado.includes("MERCADONA") ? "OK (obligatorio en MERCADONA)" : "REVISAR (¿obligatorio para este cliente?)")
+    : (clienteRellenado.includes("MERCADONA") ? "REVISAR (MERCADONA suele llevar código R)" : "OK (código R no aplica)")
 });
 
 // Fecha envasado visible
@@ -388,9 +405,12 @@ const nombreSapRellenado = String(productoRellenado.nombre_sap || "").toUpperCas
 let workflowDestino = "pina";
 if (/COCO/.test(nombreSapRellenado)) workflowDestino = "coco";
 
-// TACOS DELMONTE tienen flujo especial 3-fases. Si detectamos, avisar
-// aunque el destino base sea piña.
-const esTacos = /TACOS/.test(nombreSapRellenado);
+// TACOS DELMONTE tienen flujo especial 3-fases (tarrina + film + caja) que
+// requiere el workflow tacos-frontal para el film. OJO: hay otros productos
+// llamados "tacos" (GUFRESCO coco tacos, LIDL Chef Select tacos, etc.) que
+// NO usan el flujo 3-fases — son bolsas o botes normales. Solo DELMONTE
+// TACOS activa el 3-fases.
+const esTacos3Fases = /TACOS/.test(nombreSapRellenado) && /DELMONTE/i.test(clienteRellenado);
 
 // ============================================================
 // 6. NOTAS Y RECOMENDACIÓN
@@ -411,8 +431,8 @@ if (!detectado.fecha_envasado_visible) {
   notas.push("La etiqueta NO muestra fecha de envasado. El workflow usará la fecha_produccion que envía la HojaFabricacion como referencia.");
 }
 
-if (esTacos) {
-  notas.push("Producto tipo TACOS. Requiere flujo 3-fases (tarrina + film + caja). Además del workflow piña, revisar workflow tacos-frontal para la fase film.");
+if (esTacos3Fases) {
+  notas.push("Producto DELMONTE TACOS. Requiere flujo 3-fases (tarrina + film + caja). Además del workflow piña, revisar workflow tacos-frontal para la fase film.");
 }
 
 if (detectado.fecha_caducidad && !detectado.fecha_caducidad.match(/\d{2,4}$/)) {
@@ -447,7 +467,7 @@ return [{
     clasificacion: clasificacion,
     requiere_cambios_workflow: clasificacion === "EXCEPCION",
     workflow_destino: workflowDestino,
-    es_tacos: esTacos,
+    es_tacos: esTacos3Fases,
     motivos_excepcion: motivosNoCubiertos,
     heuristicas_ya_cubiertas: heuristicasCubiertas,
     notas: notas,
