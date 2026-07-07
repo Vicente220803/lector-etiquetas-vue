@@ -283,7 +283,102 @@ if (!["variable_precio_9_3_1", "variable_peso_9_3_1", "fijo_13", "fijo_8", "sin_
   motivosExcepcion.push(`Tipo de EAN no reconocido: "${detectado.tipo_ean}".`);
 }
 
-const clasificacion = motivosExcepcion.length === 0 ? "ESTANDAR" : "EXCEPCION";
+// ============================================================
+// 4b. HEURÍSTICAS YA SOPORTADAS EN LOS WORKFLOWS ACTUALES
+// ============================================================
+// Cuando el patrón detectado ES una excepción pero YA está cubierta por
+// código existente en los workflows piña/coco, movemos ese motivo a
+// "cubiertos_por_heuristica" y NO cuenta para la clasificación final.
+// Solo salta a EXCEPCION real si aparece un motivo NO cubierto.
+
+const heuristicasCubiertas = [];
+
+// GUFRESCO / OPCIO GELATS SL — workflow coco
+// Patrón: sin EAN + origen India o Costa de Marfil + lote 3 dígitos
+if (
+  detectado.tipo_ean === "sin_ean" &&
+  /INDIA|COSTA\s+DE?\s+MARFIL/i.test(String(detectado.origen || "")) &&
+  detectado.lote_formato === "3 dígitos" &&
+  (/GUFRESCO|GELATS|OPCIO/i.test(clienteRellenado))
+) {
+  heuristicasCubiertas.push({
+    workflow: "coco",
+    heuristica: "GUFRESCO/GELATS sin EAN por origen India-Marfil + lote 3 dig",
+    motivo_cubierto: "sin_ean"
+  });
+}
+
+// ALABAU FRUTAS Y VERDURAS — workflow piña
+// Patrón: sin EAN + piña rodajas + peso 0.540 kg
+if (
+  detectado.tipo_ean === "sin_ean" &&
+  /RODAJAS/i.test(String(detectado.producto_texto || "")) &&
+  detectado.peso_neto && /0[.,]540\s*Kg/i.test(String(detectado.peso_neto)) &&
+  /ALABAU/i.test(clienteRellenado)
+) {
+  heuristicasCubiertas.push({
+    workflow: "pina",
+    heuristica: "ALABAU sin EAN por piña rodajas + peso 0.540kg",
+    motivo_cubierto: "sin_ean"
+  });
+}
+
+// ANTICH SPANISH FOOD — workflow piña
+// Patrón: sin EAN + origen Costa Rica + lote 3 dígitos
+if (
+  detectado.tipo_ean === "sin_ean" &&
+  /COSTA\s*RICA/i.test(String(detectado.origen || "")) &&
+  detectado.lote_formato === "3 dígitos" &&
+  /ANTICH/i.test(clienteRellenado)
+) {
+  heuristicasCubiertas.push({
+    workflow: "pina",
+    heuristica: "ANTICH sin EAN por origen Costa Rica + lote 3 dig",
+    motivo_cubierto: "sin_ean"
+  });
+}
+
+// CASA AMETLLER — workflow piña
+// Patrón: idioma catalán (regex "caducitat" ya soportado)
+if (
+  /CATALÁN|CATALAN/i.test(String(detectado.idioma || "")) &&
+  /AMETLLER/i.test(clienteRellenado)
+) {
+  heuristicasCubiertas.push({
+    workflow: "pina",
+    heuristica: "CASA AMETLLER en catalán (regex 'caducitat' incluida)",
+    motivo_cubierto: "idioma_catalan"
+  });
+}
+
+// LIDL Chef Select vs PRP — workflow piña
+// Patrón: LIDL + marca "chef select" en OCR → desambigua via nombre_sap
+if (
+  detectado.marca_logo &&
+  /CHEF\s*SELECT/i.test(String(detectado.marca_logo)) &&
+  /LIDL/i.test(clienteRellenado)
+) {
+  heuristicasCubiertas.push({
+    workflow: "pina",
+    heuristica: "LIDL Chef Select desambiguado por marca en OCR + nombre_sap del padre",
+    motivo_cubierto: "colision_prefijo_LIDL"
+  });
+}
+
+// Motivos que quedan sin cubrir por heurística existente
+const motivosNoCubiertos = motivosExcepcion.filter(m => {
+  const esSinEan = /sin EAN legible/i.test(m);
+  const esIdioma = /Idioma "/i.test(m);
+  const esColisionPrefijo = /Prefijo EAN colisiona/i.test(m);
+
+  if (esSinEan && heuristicasCubiertas.some(h => h.motivo_cubierto === "sin_ean")) return false;
+  if (esIdioma && heuristicasCubiertas.some(h => h.motivo_cubierto === "idioma_catalan")) return false;
+  if (esColisionPrefijo && heuristicasCubiertas.some(h => h.motivo_cubierto === "colision_prefijo_LIDL")) return false;
+
+  return true;
+});
+
+const clasificacion = motivosNoCubiertos.length === 0 ? "ESTANDAR" : "EXCEPCION";
 
 // ============================================================
 // 5. DETERMINAR WORKFLOW DESTINO
@@ -324,9 +419,16 @@ if (detectado.fecha_caducidad && !detectado.fecha_caducidad.match(/\d{2,4}$/)) {
   notas.push("Fecha caducidad sin año. El workflow asume año actual/siguiente automáticamente.");
 }
 
+// Si hay heurísticas ya cubiertas, añadir notas informativas
+heuristicasCubiertas.forEach(h => {
+  notas.push(`Este patrón YA está cubierto por la heurística "${h.heuristica}" en el workflow ${h.workflow}. No hace falta cambiar código.`);
+});
+
 const recomendacion = clasificacion === "ESTANDAR"
-  ? `Puedes activar el producto en BD. El workflow ${workflowDestino} lo identificará por prefijo EAN sin cambios adicionales.`
-  : `NO activar el producto todavía. Abrir Claude Code con este informe (copia el JSON completo). Se necesita añadir lógica al workflow ${workflowDestino} para: ${motivosExcepcion.map(m => m.split('.')[0]).join('; ')}.`;
+  ? (heuristicasCubiertas.length > 0
+      ? `Puedes activar el producto en BD. Aunque la etiqueta tiene un patrón especial, ya está cubierto por heurística existente en el workflow ${workflowDestino}.`
+      : `Puedes activar el producto en BD. El workflow ${workflowDestino} lo identificará por prefijo EAN sin cambios adicionales.`)
+  : `NO activar el producto todavía. Abrir Claude Code con este informe (copia el JSON completo). Se necesita añadir lógica al workflow ${workflowDestino} para: ${motivosNoCubiertos.map(m => m.split('.')[0]).join('; ')}.`;
 
 // ============================================================
 // 7. DEVOLVER JSON ESTRUCTURADO
@@ -346,7 +448,8 @@ return [{
     requiere_cambios_workflow: clasificacion === "EXCEPCION",
     workflow_destino: workflowDestino,
     es_tacos: esTacos,
-    motivos_excepcion: motivosExcepcion,
+    motivos_excepcion: motivosNoCubiertos,
+    heuristicas_ya_cubiertas: heuristicasCubiertas,
     notas: notas,
     recomendacion_activacion: recomendacion,
     producto_analizado: {
