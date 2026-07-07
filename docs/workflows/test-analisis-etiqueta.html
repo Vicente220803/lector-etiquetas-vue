@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Test — Análisis Etiqueta Alta</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; }
+    h1 { font-size: 1.4rem; }
+    label { display: block; margin-top: 16px; font-weight: 600; }
+    input[type=file], textarea, input[type=text] {
+      width: 100%; padding: 8px; margin-top: 4px; font-family: monospace; font-size: 0.85rem;
+      border: 1px solid #ccc; border-radius: 4px;
+    }
+    textarea { min-height: 220px; }
+    button {
+      margin-top: 16px; padding: 10px 24px; background: #ff6d5a; color: white;
+      border: 0; border-radius: 4px; cursor: pointer; font-size: 1rem;
+    }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    pre {
+      background: #f6f6f6; padding: 16px; border-radius: 4px; margin-top: 20px;
+      max-height: 600px; overflow: auto; font-size: 0.85rem;
+    }
+    .verde { color: #2b8a3e; font-weight: 600; }
+    .rojo { color: #c92a2a; font-weight: 600; }
+    .info { color: #666; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <h1>Test workflow — Análisis Etiqueta Alta</h1>
+  <p class="info">Sube una foto de etiqueta y ajusta el JSON del producto para probar el workflow <code>analisis-etiqueta-alta</code>.</p>
+
+  <label>URL del webhook (test o production):</label>
+  <input type="text" id="url" value="https://surexportlevante.app.n8n.cloud/webhook-test/analisis-etiqueta-alta">
+
+  <label>Foto de la etiqueta:</label>
+  <input type="file" id="foto" accept="image/*">
+
+  <label>producto_json (los campos que rellenó el compa en Maestros):</label>
+  <textarea id="producto">{
+  "id": 68,
+  "cliente": "LIDL SUPERMERCADOS, S.A.U",
+  "nombre_sap": "PIÑA CILINDRO 06X540 LIDL VD CHEF SELECT",
+  "ean": "227634000",
+  "tipo_codigo_ean": "Variable precio",
+  "gramaje_peso_fijo": null,
+  "p_x_d_l_m_x": 9,
+  "p_x_j": 9,
+  "p_x_v": 9,
+  "etiqueta_de_caja": false,
+  "dun": null,
+  "cliente_alias": null
+}</textarea>
+
+  <button id="enviar">Enviar al webhook</button>
+
+  <div id="estado"></div>
+  <pre id="salida"></pre>
+
+  <script>
+    const btn = document.getElementById('enviar');
+    const estadoEl = document.getElementById('estado');
+    const salidaEl = document.getElementById('salida');
+
+    btn.addEventListener('click', async () => {
+      const url = document.getElementById('url').value.trim();
+      const foto = document.getElementById('foto').files[0];
+      const productoTexto = document.getElementById('producto').value.trim();
+
+      if (!foto) { alert('Selecciona una foto primero.'); return; }
+      if (!productoTexto) { alert('El producto_json no puede estar vacío.'); return; }
+
+      // Validar que producto_json sea JSON válido
+      try { JSON.parse(productoTexto); }
+      catch (e) { alert('El producto_json no es JSON válido: ' + e.message); return; }
+
+      btn.disabled = true;
+      estadoEl.innerHTML = '<p class="info">Enviando... esto puede tardar unos segundos.</p>';
+      salidaEl.textContent = '';
+
+      const formData = new FormData();
+      formData.append('file', foto);
+      formData.append('producto_json', productoTexto);
+
+      try {
+        const res = await fetch(url, { method: 'POST', body: formData });
+        const contentType = res.headers.get('content-type') || '';
+        const isJson = contentType.includes('json');
+        const data = isJson ? await res.json() : await res.text();
+
+        if (!res.ok) {
+          estadoEl.innerHTML = `<p class="rojo">Error HTTP ${res.status}</p>`;
+        } else {
+          const clasif = (isJson && data.clasificacion) || 'sin clasificacion';
+          if (clasif === 'ESTANDAR') {
+            estadoEl.innerHTML = '<p class="verde">Respuesta recibida — CUMPLE ESTÁNDAR ✓</p>';
+          } else if (clasif === 'EXCEPCION') {
+            estadoEl.innerHTML = '<p class="rojo">Respuesta recibida — REQUIERE EXCEPCIÓN ⚠️</p>';
+          } else {
+            estadoEl.innerHTML = '<p class="info">Respuesta recibida.</p>';
+          }
+        }
+
+        salidaEl.textContent = isJson ? JSON.stringify(data, null, 2) : String(data);
+      } catch (e) {
+        estadoEl.innerHTML = `<p class="rojo">Error de red: ${e.message}</p>`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
