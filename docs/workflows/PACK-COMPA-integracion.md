@@ -103,70 +103,70 @@ async function analizarEtiqueta(archivoFoto, productoObj) {
 
 ## 4. Response
 
-Respuesta JSON con esta estructura (envuelto en array `[{...}]` porque es cómo lo emite n8n):
+El webhook devuelve **un objeto plano** (no envuelto en array), tanto en éxito como en error controlado. Estructura de éxito:
 
 ```json
-[
-  {
-    "detectado_en_etiqueta": {
-      "ean_completo": "2 276340 004505",
-      "ean_prefijo_7dig": "2276340",
-      "tipo_ean": "variable_precio_9_3_1",
-      "peso_neto": "0.628 Kg",
-      "precio_kg": "6.45 €/Kg",
-      "importe": "4.05 €",
-      "fecha_envasado_visible": false,
-      "fecha_envasado": null,
-      "fecha_caducidad": "14.07.26",
-      "codigo_r_visible": false,
-      "codigo_r": null,
-      "lote_formato": "6 dígitos con separador",
-      "lote_ejemplo": "002 187 0559 00",
-      "idioma": "español",
-      "marca_logo": "chef select",
-      "origen": "Costa Rica",
-      "producto_texto": "PIÑA RODAJAS"
+{
+  "detectado_en_etiqueta": {
+    "ean_completo": "2 276340 004505",
+    "ean_prefijo_7dig": "2276340",
+    "tipo_ean": "variable_precio_9_3_1",
+    "peso_neto": "0.628 Kg",
+    "precio_kg": "6.45 €/Kg",
+    "importe": "4.05 €",
+    "fecha_envasado_visible": false,
+    "fecha_envasado": null,
+    "fecha_caducidad": "14.07.26",
+    "codigo_r_visible": false,
+    "codigo_r": null,
+    "lote_formato": "6 dígitos con separador",
+    "lote_ejemplo": "002 187 0559 00",
+    "idioma": "español",
+    "marca_logo": "chef select",
+    "origen": "Costa Rica",
+    "producto_texto": "PIÑA RODAJAS"
+  },
+  "comparacion_con_campos_rellenados": [
+    {
+      "campo": "cliente",
+      "valor_rellenado": "LIDL SUPERMERCADOS, S.A.U",
+      "valor_detectado": "(no deducible por prefijo)",
+      "estado": "OK (no verificable)"
     },
-    "comparacion_con_campos_rellenados": [
-      {
-        "campo": "cliente",
-        "valor_rellenado": "LIDL SUPERMERCADOS, S.A.U",
-        "valor_detectado": "(no deducible por prefijo)",
-        "estado": "OK (no verificable)"
-      },
-      {
-        "campo": "ean_prefijo",
-        "valor_rellenado": "2276340",
-        "valor_detectado": "2276340",
-        "estado": "OK"
-      }
-      // ... más campos
-    ],
-    "chequeo_colisiones_ean": {
-      "prefijo_detectado": "2276340",
-      "prefijo_colisiona": false,
-      "otros_productos_mismo_prefijo": [],
-      "colisiones_graves": []
-    },
-    "clasificacion": "ESTANDAR",
-    "requiere_cambios_workflow": false,
-    "workflow_destino": "pina",
-    "es_tacos": false,
-    "motivos_excepcion": [],
-    "notas": [
-      "Marca/logo detectada: \"chef select\". Si hay otro SKU del mismo cliente con marca distinta, puede requerir desambiguación como Chef Select/PRP.",
-      "La etiqueta NO muestra fecha de envasado. El workflow usará la fecha_produccion que envía la HojaFabricacion como referencia."
-    ],
-    "recomendacion_activacion": "Puedes activar el producto en BD. El workflow pina lo identificará por prefijo EAN sin cambios adicionales.",
-    "producto_analizado": {
-      "id": 68,
-      "cliente": "LIDL SUPERMERCADOS, S.A.U",
-      "nombre_sap": "PIÑA CILINDRO 06X540 LIDL VD CHEF SELECT"
-    },
-    "fecha_informe": "6/7/2026, 12:47:09"
-  }
-]
+    {
+      "campo": "ean_prefijo",
+      "valor_rellenado": "2276340",
+      "valor_detectado": "2276340",
+      "estado": "OK"
+    }
+    // ... más campos
+  ],
+  "chequeo_colisiones_ean": {
+    "prefijo_detectado": "2276340",
+    "prefijo_colisiona": false,
+    "otros_productos_mismo_prefijo": [],
+    "colisiones_graves": []
+  },
+  "clasificacion": "ESTANDAR",
+  "requiere_cambios_workflow": false,
+  "workflow_destino": "pina",
+  "es_tacos": false,
+  "motivos_excepcion": [],
+  "notas": [
+    "Marca/logo detectada: \"chef select\". Si hay otro SKU del mismo cliente con marca distinta, puede requerir desambiguación como Chef Select/PRP.",
+    "La etiqueta NO muestra fecha de envasado. El workflow usará la fecha_produccion que envía la HojaFabricacion como referencia."
+  ],
+  "recomendacion_activacion": "Puedes activar el producto en BD. El workflow pina lo identificará por prefijo EAN sin cambios adicionales.",
+  "producto_analizado": {
+    "id": 68,
+    "cliente": "LIDL SUPERMERCADOS, S.A.U",
+    "nombre_sap": "PIÑA CILINDRO 06X540 LIDL VD CHEF SELECT"
+  },
+  "fecha_informe": "6/7/2026, 12:47:09"
+}
 ```
+
+**Nota histórica**: por diseño de n8n con "Respond With: First Incoming Item", el objeto viaja directamente sin envolver. En versiones anteriores del pack se documentó incorrectamente como array. El código robusto debería contemplar ambos formatos (`Array.isArray(raw) ? raw[0] : raw`), pero hoy el formato real es siempre objeto plano.
 
 ### Estados posibles del campo `estado` en cada comparación:
 
@@ -313,33 +313,25 @@ Botón "Copiar informe" copia al portapapeles el JSON completo del análisis.
 
 ### Ejemplo de respuesta con error controlado
 
-Ojo con el formato: n8n devuelve **array** cuando todo va bien, pero puede devolver **objeto plano** cuando hay error controlado. El código de integración debe contemplar ambos:
+Errores controlados incluyen `error: true`, `mensaje_error`, y también `clasificacion: "REINTENTAR"`:
 
 ```json
-// Formato normal (éxito) — array
-[
-  {
-    "detectado_en_etiqueta": { ... },
-    "clasificacion": "ESTANDAR",
-    ...
-  }
-]
-
-// Formato error controlado — objeto plano
 {
   "error": true,
   "mensaje_error": "El campo 'producto_json' no es un JSON válido.",
-  "detalle": "SyntaxError: Unexpected token..."
+  "detalle": "SyntaxError: Unexpected token...",
+  "clasificacion": "REINTENTAR"
 }
 ```
 
-En el frontend, normaliza así:
+Recomendación de manejo robusto:
 
 ```javascript
 const raw = await res.json();
+// Por si en alguna versión futura viniera envuelto en array
 const data = Array.isArray(raw) ? raw[0] : raw;
-if (data?.error === true) {
-  // mostrar data.mensaje_error como aviso
+if (data?.error === true || data?.clasificacion === 'REINTENTAR') {
+  // mostrar data.mensaje_error como aviso al usuario
 } else {
   // procesar informe normal
 }
