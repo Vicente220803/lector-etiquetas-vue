@@ -1,7 +1,24 @@
 /**
  * NODO: Code JavaScript - ANALISIS ETIQUETA ALTA CLIENTE NUEVO
- * Versión: 1.0
- * ultima_actualizacion: 2026-07-06
+ * Versión: 1.3
+ * ultima_actualizacion: 2026-07-08
+ *
+ * v1.3 — Fix ean_prefijo con lógica propia:
+ *   - "OK (rellenado)" reemplazado por "DIFIERE (BD tiene EAN pero foto no)"
+ *     cuando BD tiene EAN pero foto no muestra ninguno.
+ *   - Añadido motivo EXCEPCION cuando ean_prefijo sale DIFIERE
+ *     (foto de producto equivocado).
+ *
+ * v1.2 — Refinamiento Capa 1 tras primera prueba GUFRESCO COCO TACOS:
+ *   - Normalización defensiva: lote_formato="otros" con ejemplo 3 dígitos
+ *     se reclasifica a "3 dígitos" (evita falso positivo por variabilidad IA).
+ *   - Nueva heurística cubierta: TACOS 1-fase para clientes conocidos
+ *     (GUFRESCO, GELATS, OPCIO, LIDL) → NO dispara EXCEPCION.
+ *
+ * v1.1 — Capa 1 de blindaje: añadidos 3 chequeos a motivosExcepcion:
+ *   - Producto de tipo nuevo (nombre_sap sin PIÑA/COCO) → EXCEPCION.
+ *   - TACOS que no son DELMONTE → EXCEPCION (confirmar 1-fase vs multi-fase).
+ *   - Producto con etiqueta_de_caja=true → EXCEPCION (verificar workflow caja).
  *
  * Snapshot desde n8n. NO editar aquí — la fuente de verdad es n8n.
  * Sincronizar tras cualquier cambio en el workflow.
@@ -105,6 +122,16 @@ try {
   }];
 }
 
+// Normalización defensiva: si la IA marcó lote_formato como "otros"
+// pero el ejemplo es exactamente 3 dígitos (típico GUFRESCO/ANTICH),
+// lo re-clasificamos como "3 dígitos" para que las heurísticas matcheen.
+if (
+  detectado.lote_formato === "otros" &&
+  /^\d{3}$/.test(String(detectado.lote_ejemplo || "").trim())
+) {
+  detectado.lote_formato = "3 dígitos";
+}
+
 // Productos activos en BD
 const productosDB = $('Get many rows').all().map(it => it.json);
 const activos = productosDB.filter(p => {
@@ -140,6 +167,7 @@ if (prefijoDetectado && prefijoDetectado.length === 7) {
 // (los del mismo cliente son SKUs paralelos, se gestionan con desambiguación
 // por marca/logo — no bloqueante).
 const clienteRellenado = String(productoRellenado.cliente || "").toUpperCase().trim();
+const nombreSapRellenado = String(productoRellenado.nombre_sap || "").toUpperCase();
 const colisionesGraves = otrosConMismoPrefijo.filter(p => {
   const c = String(p.cliente || "").toUpperCase().trim();
   return c && c !== clienteRellenado &&
@@ -180,14 +208,30 @@ comparaciones.push({
     : "OK (no verificable)"
 });
 
-// EAN: comparamos prefijo rellenado (primeros 7) vs prefijo detectado
+// EAN: comparamos prefijo rellenado (primeros 7) vs prefijo detectado.
+// Lógica específica (no usa estadoComparacion genérica):
+// - Ambos vacíos: OK (producto sin EAN coherente).
+// - Rellenado vacío + detectado con valor: REVISAR (rellena BD).
+// - Rellenado con valor + detectado vacío: DIFIERE (la foto no tiene EAN
+//   pero el producto SÍ debería → probable foto equivocada).
+// - Ambos con valor coincidentes: OK.
+// - Ambos con valor distintos: DIFIERE (foto de otro producto o cliente).
 const eanRellenado = String(productoRellenado.ean || "").trim();
 const prefijoRellenado = eanRellenado.length >= 7 ? eanRellenado.substring(0, 7) : null;
+const estadoEanPrefijo = (() => {
+  const relEs = !prefijoRellenado;
+  const detEs = !prefijoDetectado;
+  if (relEs && detEs) return "OK";
+  if (relEs && !detEs) return "REVISAR (rellena EAN en BD)";
+  if (!relEs && detEs) return "DIFIERE (BD tiene EAN pero la foto no lo muestra)";
+  if (prefijoRellenado === prefijoDetectado) return "OK";
+  return "DIFIERE";
+})();
 comparaciones.push({
   campo: "ean_prefijo",
   valor_rellenado: prefijoRellenado || "(no rellenado)",
   valor_detectado: prefijoDetectado || "(no detectado)",
-  estado: estadoComparacion(prefijoRellenado, prefijoDetectado)
+  estado: estadoEanPrefijo
 });
 
 // Tipo EAN — compara equivalencias conceptuales entre BD (texto libre) y IA (enum).
@@ -300,6 +344,53 @@ if (!["variable_precio_9_3_1", "variable_peso_9_3_1", "fijo_13", "fijo_8", "sin_
   motivosExcepcion.push(`Tipo de EAN no reconocido: "${detectado.tipo_ean}".`);
 }
 
+// PRODUCTO DE TIPO NUEVO — no existe workflow específico
+// Los únicos workflows productivos son piña y coco. Cualquier otro tipo
+// (MELÓN, SANDÍA, MANGO, PAPAYA, KIWI...) requiere workflow nuevo.
+const tipoProductoConocido = /PI[ÑN]A|COCO/i.test(nombreSapRellenado);
+if (!tipoProductoConocido) {
+  motivosExcepcion.push(
+    `Producto de tipo nuevo. El nombre_sap "${productoRellenado.nombre_sap}" no incluye PIÑA ni COCO, ` +
+    `que son los únicos workflows existentes. NO ACTIVAR el producto hasta: ` +
+    `(1) confirmar con Antoni si se crea un workflow nuevo (posiblemente clonando piña); ` +
+    `(2) crear el workflow en n8n y su Code node de identificación; ` +
+    `(3) actualizar la sección "workflow_destino" del code de este análisis para reconocer el nuevo tipo.`
+  );
+}
+
+// TACOS que NO son DELMONTE — requieren revisión del flujo (1-fase vs multi-fase)
+// Hoy SOLO DELMONTE TACOS usa el flujo 3-fases (tarrina + film + caja).
+// Otros TACOS (GUFRESCO, LIDL, etc.) son 1-fase pero conviene confirmarlo.
+if (/TACOS/i.test(nombreSapRellenado) && !/DELMONTE/i.test(clienteRellenado)) {
+  motivosExcepcion.push(
+    `Producto TACOS pero cliente "${productoRellenado.cliente}" no es DELMONTE. ` +
+    `Solo DELMONTE TACOS usa flujo 3-fases (tarrina + film + caja). Requiere: ` +
+    `(1) confirmar con el cliente si su producto TACOS es 1-fase (bote/bolsa/tarrina normal) o multi-fase; ` +
+    `(2) si es multi-fase, ampliar el workflow tacos-frontal para soportar este cliente; ` +
+    `(3) si es 1-fase, verificar que la lógica de piña o coco lo cubre por el prefijo EAN.`
+  );
+}
+
+// EAN prefijo no coincide (foto de producto distinto o foto sin EAN cuando BD sí lo tiene)
+if (estadoEanPrefijo.startsWith("DIFIERE")) {
+  motivosExcepcion.push(
+    `Prefijo EAN no coincide entre BD y foto. Rellenado: "${prefijoRellenado || '(vacío)'}", ` +
+    `detectado en foto: "${prefijoDetectado || '(vacío)'}". ` +
+    `Verifica que la foto corresponde al producto que estás dando de alta.`
+  );
+}
+
+// ETIQUETA DE CAJA marcada — el análisis actual solo cubre la etiqueta del producto
+if (productoRellenado.etiqueta_de_caja === true) {
+  motivosExcepcion.push(
+    `Producto con etiqueta_de_caja=true. Este análisis IA SOLO cubre la etiqueta del producto, NO la de la caja. Requiere: ` +
+    `(1) verificar que el campo 'dun' del producto está rellenado en BD (imprescindible para el workflow caja); ` +
+    `(2) hacer una prueba real del workflow caja con una foto de la caja del producto; ` +
+    `(3) confirmar que la lógica de identificación de cliente en el workflow caja cubre este producto ` +
+    `(código proveedor MERCADONA, EAN caja ALDI, DUN CONSUM, etc.).`
+  );
+}
+
 // ============================================================
 // 4b. HEURÍSTICAS YA SOPORTADAS EN LOS WORKFLOWS ACTUALES
 // ============================================================
@@ -382,15 +473,33 @@ if (
   });
 }
 
+// TACOS 1-fase para clientes ya conocidos — workflow coco/piña estándar
+// Solo DELMONTE TACOS usa multi-fase 3-fases (tarrina + film + caja).
+// Otros clientes conocidos (GUFRESCO, GELATS, OPCIO, LIDL) tienen TACOS
+// en formato bote/bolsa normal → 1-fase, ya cubierto por workflow coco o piña.
+if (
+  /TACOS/i.test(nombreSapRellenado) &&
+  !/DELMONTE/i.test(clienteRellenado) &&
+  /GUFRESCO|GELATS|OPCIO|LIDL/i.test(clienteRellenado)
+) {
+  heuristicasCubiertas.push({
+    workflow: /COCO/i.test(nombreSapRellenado) ? "coco" : "pina",
+    heuristica: `TACOS 1-fase para ${productoRellenado.cliente} (bolsa/bote normal, workflow estándar)`,
+    motivo_cubierto: "tacos_no_delmonte"
+  });
+}
+
 // Motivos que quedan sin cubrir por heurística existente
 const motivosNoCubiertos = motivosExcepcion.filter(m => {
   const esSinEan = /sin EAN legible/i.test(m);
   const esIdioma = /Idioma "/i.test(m);
   const esColisionPrefijo = /Prefijo EAN colisiona/i.test(m);
+  const esTacosNoDelmonte = /TACOS pero cliente/i.test(m);
 
   if (esSinEan && heuristicasCubiertas.some(h => h.motivo_cubierto === "sin_ean")) return false;
   if (esIdioma && heuristicasCubiertas.some(h => h.motivo_cubierto === "idioma_catalan")) return false;
   if (esColisionPrefijo && heuristicasCubiertas.some(h => h.motivo_cubierto === "colision_prefijo_LIDL")) return false;
+  if (esTacosNoDelmonte && heuristicasCubiertas.some(h => h.motivo_cubierto === "tacos_no_delmonte")) return false;
 
   return true;
 });
@@ -401,7 +510,6 @@ const clasificacion = motivosNoCubiertos.length === 0 ? "ESTANDAR" : "EXCEPCION"
 // 5. DETERMINAR WORKFLOW DESTINO
 // ============================================================
 
-const nombreSapRellenado = String(productoRellenado.nombre_sap || "").toUpperCase();
 let workflowDestino = "pina";
 if (/COCO/.test(nombreSapRellenado)) workflowDestino = "coco";
 
