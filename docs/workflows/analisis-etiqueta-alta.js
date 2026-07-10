@@ -3,6 +3,11 @@
  * Versión: 1.3
  * ultima_actualizacion: 2026-07-08
  *
+ * NOTA arquitectónica: el análisis de la etiqueta de CAJA (Capa 2) se hace
+ * en un webhook SEPARADO dentro del mismo workflow: analisis-etiqueta-alta-CAJA.
+ * Ver docs/workflows/analisis-etiqueta-alta-CAJA.js para el Code node de
+ * ese webhook.
+ *
  * v1.3 — Fix ean_prefijo con lógica propia:
  *   - "OK (rellenado)" reemplazado por "DIFIERE (BD tiene EAN pero foto no)"
  *     cuando BD tiene EAN pero foto no muestra ninguno.
@@ -380,14 +385,16 @@ if (estadoEanPrefijo.startsWith("DIFIERE")) {
   );
 }
 
-// ETIQUETA DE CAJA marcada — el análisis actual solo cubre la etiqueta del producto
+// ETIQUETA DE CAJA marcada — el análisis del bote NO cubre la etiqueta de la caja.
+// La verificación de la caja se hace en el webhook separado
+// `analisis-etiqueta-alta-CAJA` (misma URL base, sufijo -CAJA).
 if (productoRellenado.etiqueta_de_caja === true) {
   motivosExcepcion.push(
-    `Producto con etiqueta_de_caja=true. Este análisis IA SOLO cubre la etiqueta del producto, NO la de la caja. Requiere: ` +
-    `(1) verificar que el campo 'dun' del producto está rellenado en BD (imprescindible para el workflow caja); ` +
-    `(2) hacer una prueba real del workflow caja con una foto de la caja del producto; ` +
-    `(3) confirmar que la lógica de identificación de cliente en el workflow caja cubre este producto ` +
-    `(código proveedor MERCADONA, EAN caja ALDI, DUN CONSUM, etc.).`
+    `Producto con etiqueta_de_caja=true. Este análisis SOLO cubre la etiqueta del bote/tarrina. ` +
+    `Requiere hacer también el análisis de la CAJA en el webhook 'analisis-etiqueta-alta-CAJA' ` +
+    `subiendo una foto de la etiqueta exterior de la caja. Ese análisis verificará si el ` +
+    `workflow caja ya reconoce este cliente (patrones actuales: MERCADONA por código proveedor, ` +
+    `ALDI/DELMONTE/CONSUM por DUN o formato).`
   );
 }
 

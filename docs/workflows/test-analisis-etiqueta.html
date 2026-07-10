@@ -31,25 +31,22 @@
   <p class="info">Sube una foto de etiqueta y ajusta el JSON del producto para probar el workflow <code>analisis-etiqueta-alta</code>.</p>
 
   <label>URL del webhook (test o production):</label>
-  <input type="text" id="url" value="https://surexportlevante.app.n8n.cloud/webhook-test/analisis-etiqueta-alta">
+  <input type="text" id="url" value="https://surexportlevante.app.n8n.cloud/webhook/33fcb05d-8168-4b97-bcd2-b9adcb619db2">
+  <p class="info">
+    URLs conocidas:
+    <br>· BOTE: <code>https://surexportlevante.app.n8n.cloud/webhook/analisis-etiqueta-alta</code>
+    <br>· CAJA: <code>https://surexportlevante.app.n8n.cloud/webhook/33fcb05d-8168-4b97-bcd2-b9adcb619db2</code>
+  </p>
 
-  <label>Foto de la etiqueta:</label>
+  <label>Foto de la etiqueta (bote o caja según el webhook):</label>
   <input type="file" id="foto" accept="image/*">
 
   <label>producto_json (los campos que rellenó el compa en Maestros):</label>
   <textarea id="producto">{
-  "id": 68,
-  "cliente": "LIDL SUPERMERCADOS, S.A.U",
-  "nombre_sap": "PIÑA CILINDRO 06X540 LIDL VD CHEF SELECT",
-  "ean": "227634000",
-  "tipo_codigo_ean": "Variable precio",
-  "gramaje_peso_fijo": null,
-  "p_x_d_l_m_x": 9,
-  "p_x_j": 9,
-  "p_x_v": 9,
-  "etiqueta_de_caja": false,
-  "dun": null,
-  "cliente_alias": null
+  "id": 999,
+  "cliente": "MERCADONA SA",
+  "nombre_sap": "PIÑA RODAJAS MERCADONA (test caja)",
+  "dun": null
 }</textarea>
 
   <button id="enviar">Enviar al webhook</button>
