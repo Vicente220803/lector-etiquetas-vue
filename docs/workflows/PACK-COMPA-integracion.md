@@ -2,7 +2,7 @@
 
 Documento para el equipo de cmi-operaciones. Especifica cómo integrar la funcionalidad "Analizar etiqueta con IA" en el Maestro de Productos.
 
-Última actualización: 2026-07-06.
+Última actualización: 2026-07-08 (añadida sección 10 — Capa 2 rama CAJA).
 
 ---
 
@@ -352,11 +352,200 @@ if (data?.error === true || data?.clasificacion === 'REINTENTAR') {
 
 ---
 
-## 9. Referencias
+## 10. Extensión Capa 2 — Análisis de etiqueta de CAJA (nuevo)
 
-- **Prompt actual del OpenAI**: `docs/workflows/analisis-etiqueta-alta-prompt.md` en el repo del lector.
-- **Code JS del workflow**: `docs/workflows/analisis-etiqueta-alta.js` en el repo del lector.
-- **Spec técnica completa**: `docs/workflows/analisis-etiqueta-alta.md` en el repo del lector.
-- **Test HTML local** (para probar el webhook sin UI): `docs/workflows/test-analisis-etiqueta.html`.
+Añadida el 2026-07-08. **No urgente** — solo se necesita cuando aparezca el primer cliente NUEVO con `etiqueta_de_caja=true`. La sección 1-9 sigue siendo válida tal cual para el 90% de casos (productos sin etiqueta de caja).
+
+### 10.1 Motivación
+
+Algunos productos (MERCADONA, ALDI, CONSUM, DELMONTE, y cualquier futuro cliente) tienen `etiqueta_de_caja=true` en BD. Además de la etiqueta del bote/tarrina, tienen una etiqueta exterior en la caja de embalaje que también verifica el sistema (workflow `caja` en n8n).
+
+Cuando el compa da de alta un cliente nuevo con etiqueta de caja, ahora existe un segundo webhook que:
+1. Analiza la foto de la etiqueta de la CAJA.
+2. Cross-checkea las señas detectadas contra los 7 patrones que hoy reconoce el workflow `caja` (código de proveedor MERCADONA 948716, EAN caja ALDI 6012873, DUN CONSUM 3843701912201, etc.).
+3. Devuelve si la caja YA está soportada, si NO lo está (y qué señas se detectaron para añadir regex), o si es ambigua.
+
+### 10.2 Endpoint del webhook CAJA
+
+**URL producción**:
+```
+POST https://surexportlevante.app.n8n.cloud/webhook/33fcb05d-8168-4b97-bcd2-b9adcb619db2
+```
+
+(URL con UUID generado automáticamente por n8n Cloud. Si en el futuro se cambia por un slug legible tipo `analisis-etiqueta-alta-CAJA`, actualizar aquí.)
+
+**Content-Type**: `multipart/form-data` (mismo formato que el webhook bote).
+
+**Auth**: ninguna.
+
+### 10.3 Cuándo llamar a este webhook
+
+Solo cuando el compa esté analizando la etiqueta de la **CAJA** de un producto con `etiqueta_de_caja=true`. Para el bote sigue usándose el webhook original.
+
+Recomendación UI: cuando el producto seleccionado tenga `etiqueta_de_caja === true`, el modal "Analizar etiqueta con IA" debe mostrar un selector previo:
+
+```
+┌────────────────────────────────────────────┐
+│  ¿Qué vas a analizar?          [X]         │
+├────────────────────────────────────────────┤
+│                                            │
+│  Este producto tiene etiqueta de caja.     │
+│  Puedes analizar cada una por separado:    │
+│                                            │
+│  [🥫 Etiqueta del BOTE]                    │
+│  [📦 Etiqueta de la CAJA]                  │
+│                                            │
+└────────────────────────────────────────────┘
+```
+
+Según elección, el modal siguiente cambia el destino de la llamada (webhook bote o webhook caja) y el label superior ("Foto de la etiqueta del bote" / "Foto de la etiqueta de la caja").
+
+Si el producto tiene `etiqueta_de_caja === false`, el flujo es idéntico a hoy: se llama directamente al webhook bote sin preguntar nada.
+
+### 10.4 Request (webhook CAJA)
+
+Mismo formato que el webhook bote:
+
+- `file` (binary, obligatorio): foto de la etiqueta EXTERIOR de la caja.
+- `producto_json` (string, obligatorio): mismo JSON que se envía al webhook bote. La lógica solo usa `id`, `cliente`, `nombre_sap`, `dun` para contexto, no es crítico enviar todos los campos.
+
+```javascript
+async function analizarEtiquetaCaja(archivoFoto, productoObj) {
+  const formData = new FormData();
+  formData.append('file', archivoFoto);
+  formData.append('producto_json', JSON.stringify(productoObj));
+
+  const res = await fetch(
+    'https://surexportlevante.app.n8n.cloud/webhook/33fcb05d-8168-4b97-bcd2-b9adcb619db2',
+    { method: 'POST', body: formData }
+  );
+
+  if (!res.ok) throw new Error(`Error del webhook: ${res.status}`);
+  return res.json();
+}
+```
+
+### 10.5 Response (webhook CAJA)
+
+Estructura **DISTINTA** del webhook bote — más simple:
+
+```json
+{
+  "tipo_analisis": "CAJA",
+  "senas_detectadas": {
+    "codigo_proveedor": "948716",
+    "codigo_articulo": "3024",
+    "dun_ean14": null,
+    "ean13_visible": null,
+    "marca_texto_identificativo": "PIÑA RODAJAS",
+    "producto_texto": "PIÑA RODAJAS",
+    "formato": null,
+    "unidades_por_caja": null,
+    "fecha_caducidad": "15.07.26",
+    "lote": null,
+    "proveedor_nombre": "Surexport Levante, S.L.U."
+  },
+  "patrones_matched": [
+    {
+      "cliente": "MERCADONA SA",
+      "descripcion": "Código de proveedor 948716"
+    }
+  ],
+  "estado": "SOPORTADO",
+  "clasificacion": "ESTANDAR",
+  "recomendacion_activacion": "Workflow caja YA reconoce esta caja por patrón: \"Código de proveedor 948716\" (cliente MERCADONA SA). Solo asegúrate de rellenar el campo 'dun' en BD si aparece un DUN de 14 dígitos en la etiqueta. Puedes activar el producto.",
+  "producto_analizado": {
+    "id": 999,
+    "cliente": "MERCADONA SA",
+    "nombre_sap": "PIÑA RODAJAS MERCADONA"
+  },
+  "fecha_informe": "10/7/2026, 14:41:35"
+}
+```
+
+### 10.6 Campos clave del response CAJA
+
+| Campo | Valor | Cómo mostrarlo |
+|---|---|---|
+| `tipo_analisis` | Siempre `"CAJA"` | Discriminador para saber qué análisis es (útil si compartes el modal con el bote). |
+| `estado` | `SOPORTADO` / `NO_SOPORTADO` / `AMBIGUO` | Verde / rojo / naranja. Etiqueta destacada. |
+| `clasificacion` | `ESTANDAR` / `EXCEPCION` | Igual que el bote. `ESTANDAR` cuando `estado=SOPORTADO`, `EXCEPCION` en los otros dos. |
+| `patrones_matched` | Array de 0, 1 o más patrones detectados | Mostrar cliente + descripción de cada uno. |
+| `senas_detectadas` | Todo lo que la IA extrajo de la foto | Panel "Detectado en la etiqueta" (igual que el bote). |
+| `recomendacion_activacion` | Texto directo | Mostrar prominentemente. |
+
+### 10.7 Estados posibles y qué hacer
+
+**`SOPORTADO`** 🟢
+- Un solo patrón matcheó. La caja YA está reconocida por el workflow caja productivo.
+- Recomendación: el compa puede activar el producto (asegurando que rellena `dun` en BD si detectó uno).
+
+**`NO_SOPORTADO`** 🔴
+- Ningún patrón matcheó. La caja tiene señas nuevas que el workflow caja no conoce todavía.
+- Recomendación: el compa copia el informe y lo lleva a Claude Code / equipo técnico para añadir una nueva rama de reconocimiento al workflow `caja` en n8n.
+- NO activar el producto todavía.
+
+**`AMBIGUO`** 🟠
+- Más de un patrón matcheó (raro pero posible si dos clientes comparten señas). Requiere desambiguar.
+- Recomendación: revisar el `patrones_matched` y decidir manualmente + posiblemente añadir criterio adicional al workflow caja.
+
+### 10.8 UI propuesta modal resultado CAJA (mockup)
+
+```
+┌────────────────────────────────────────────────────┐
+│  Resultado del análisis (CAJA)      [X]             │
+├────────────────────────────────────────────────────┤
+│                                                    │
+│  ✅ CUMPLE ESTÁNDAR — SOPORTADO                     │
+│                                                    │
+│  Recomendación:                                    │
+│  Workflow caja YA reconoce esta caja por patrón:   │
+│  "Código de proveedor 948716" (cliente MERCADONA   │
+│  SA). Solo asegúrate de rellenar 'dun' en BD si    │
+│  aparece un DUN de 14 dígitos.                     │
+│                                                    │
+│  ── Detectado en la etiqueta ──                    │
+│  Código proveedor: 948716                          │
+│  Código artículo:  3024                            │
+│  Producto:         PIÑA RODAJAS                    │
+│  Fecha caducidad:  15.07.26                        │
+│  Proveedor:        Surexport Levante, S.L.U.       │
+│                                                    │
+│  ── Patrones matcheados ──                         │
+│  • MERCADONA SA — Código de proveedor 948716       │
+│                                                    │
+│  [Cerrar]  [Copiar informe]                        │
+└────────────────────────────────────────────────────┘
+```
+
+Para caso `NO_SOPORTADO`: badge rojo, motivo = `recomendacion_activacion` completo (que explica qué señas se detectaron y cómo añadir la regex al workflow caja).
+
+### 10.9 Manejo de errores (webhook CAJA)
+
+Idéntico al webhook bote — sección 7 aplica igual. Si `res.json()` devuelve `error: true` o `clasificacion: "REINTENTAR"`, mostrar aviso al usuario.
+
+### 10.10 Coste y consideraciones
+
+- **Coste**: mismo que el webhook bote (~0.0004 € por análisis, gpt-4o-mini). Solo se llama cuando el compa lo elige explícitamente (nunca ambos webhooks en la misma acción).
+- **Frecuencia esperada**: baja. Solo cuando entra un cliente nuevo con etiqueta de caja (varias veces al año).
+- **Ahorro**: al ser 2 webhooks separados, si el producto solo necesita análisis de bote (mayoría de casos), no se dispara la llamada de caja. Cero coste extra en los flujos actuales.
+
+### 10.11 Referencias Capa 2
+
+- **Prompt gpt-4o-mini específico caja**: `docs/workflows/analisis-etiqueta-alta-prompt-CAJA.md`.
+- **Code JS del webhook caja**: `docs/workflows/analisis-etiqueta-alta-CAJA.js`.
+- **Test HTML local** (mismo archivo que el bote, cambia solo la URL): `docs/workflows/test-analisis-etiqueta.html`.
+- **Fuente de verdad de los 7 patrones actuales del workflow caja productivo**: `docs/workflows/caja.js`. Si se añade un patrón nuevo al workflow caja, actualizar el array `PATRONES_CAJA_SOPORTADOS` de `analisis-etiqueta-alta-CAJA.js` para que el análisis alta lo reconozca también.
+
+---
+
+## 11. Referencias generales
+
+- **Prompt actual del OpenAI (bote)**: `docs/workflows/analisis-etiqueta-alta-prompt.md` en el repo del lector.
+- **Prompt caja (Capa 2)**: `docs/workflows/analisis-etiqueta-alta-prompt-CAJA.md`.
+- **Code JS del workflow (bote)**: `docs/workflows/analisis-etiqueta-alta.js`.
+- **Code JS del workflow (caja, Capa 2)**: `docs/workflows/analisis-etiqueta-alta-CAJA.js`.
+- **Spec técnica completa**: `docs/workflows/analisis-etiqueta-alta.md`.
+- **Test HTML local**: `docs/workflows/test-analisis-etiqueta.html` (tiene ambas URLs pre-configuradas).
 
 Cualquier duda técnica: contactar al mantenedor del repo del lector.
