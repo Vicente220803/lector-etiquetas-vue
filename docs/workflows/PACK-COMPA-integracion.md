@@ -2,7 +2,7 @@
 
 Documento para el equipo de cmi-operaciones. Especifica cómo integrar la funcionalidad "Analizar etiqueta con IA" en el Maestro de Productos.
 
-Última actualización: 2026-07-08 (añadida sección 10 — Capa 2 rama CAJA).
+Última actualización: 2026-07-20 (añadidas 10.12 y 10.13 — estado INCOHERENTE + campo origen).
 
 ---
 
@@ -529,6 +529,55 @@ Idéntico al webhook bote — sección 7 aplica igual. Si `res.json()` devuelve 
 - **Coste**: mismo que el webhook bote (~0.0004 € por análisis, gpt-4o-mini). Solo se llama cuando el compa lo elige explícitamente (nunca ambos webhooks en la misma acción).
 - **Frecuencia esperada**: baja. Solo cuando entra un cliente nuevo con etiqueta de caja (varias veces al año).
 - **Ahorro**: al ser 2 webhooks separados, si el producto solo necesita análisis de bote (mayoría de casos), no se dispara la llamada de caja. Cero coste extra en los flujos actuales.
+
+### 10.12 Nuevo estado `INCOHERENTE` (añadido 2026-07-20)
+
+Se ha añadido un nuevo estado a la respuesta del webhook CAJA:
+
+```
+estado: "SOPORTADO" | "NO_SOPORTADO" | "AMBIGUO" | "INCOHERENTE"
+```
+
+**Cuándo salta `INCOHERENTE`**: cuando el compa ha rellenado el `cliente` (o `nombre_sap`) del producto en Maestros, pero la foto de caja subida es de OTRO cliente o de otro tipo de producto dentro del mismo cliente. Dos casos:
+
+- **Cliente distinto**: producto rellenado MERCADONA + foto caja DELMONTE COCO.
+- **Mismo cliente pero tipo producto distinto**: producto rellenado COCO TACOS ALDI + foto caja ALDI PIÑA.
+
+En ambos casos, el campo `recomendacion_activacion` explica el problema con texto detallado.
+
+**Sugerencia UI**: mostrar un badge distinto para este estado — naranja/ámbar con etiqueta **"INCOHERENTE"** o **"FOTO NO COINCIDE"** (más pedagógico que el rojo "NO SOPORTADO" actual, que sugiere que la caja no existe cuando en realidad el problema es que subiste la foto equivocada).
+
+Ejemplo de respuesta:
+
+```json
+{
+  "tipo_analisis": "CAJA",
+  "estado": "INCOHERENTE",
+  "clasificacion": "EXCEPCION",
+  "recomendacion_activacion": "⚠️ Cliente correcto pero el TIPO de producto no coincide. El producto rellenado es 'COCO TACOS 08X150 ALDI IFCO' (COCO) pero la caja detectada es de PIÑA ('ALDI PIÑA'). Probablemente subiste la foto de la caja equivocada...",
+  ...
+}
+```
+
+### 10.13 Campo `origen` nuevo en `senas_detectadas` (añadido 2026-07-20)
+
+El prompt de la IA para caja se ha refinado para distinguir claramente entre proveedor y país de origen. Antes: la IA metía "India" en `proveedor_nombre` cuando en realidad era el origen. Ahora: hay dos campos separados:
+
+```json
+"senas_detectadas": {
+  ...
+  "proveedor_nombre": "<empresa/razón social, ej. 'Surexport Levante, S.L.U.' o null>",
+  "origen": "<país tal cual, ej. 'India', 'Costa Rica' o null>"
+}
+```
+
+**Sugerencia UI**: añadir el campo `origen` como 12º al panel "DETECTADO EN LA CAJA" del modal. Label sugerido:
+
+| Campo JSON | Label sugerido |
+|---|---|
+| `origen` | Origen |
+
+Ejemplo real: en caja DELMONTE COCO, `senas_detectadas.origen: "India"`. Info útil para el compa.
 
 ### 10.11 Referencias Capa 2
 
