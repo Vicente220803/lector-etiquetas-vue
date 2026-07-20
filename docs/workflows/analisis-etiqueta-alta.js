@@ -1,12 +1,21 @@
 /**
  * NODO: Code JavaScript - ANALISIS ETIQUETA ALTA CLIENTE NUEVO
- * Versión: 1.3
- * ultima_actualizacion: 2026-07-08
+ * Versión: 1.4
+ * ultima_actualizacion: 2026-07-20
  *
  * NOTA arquitectónica: el análisis de la etiqueta de CAJA (Capa 2) se hace
  * en un webhook SEPARADO dentro del mismo workflow: analisis-etiqueta-alta-CAJA.
  * Ver docs/workflows/analisis-etiqueta-alta-CAJA.js para el Code node de
  * ese webhook.
+ *
+ * v1.4 — LIDL Chef Select TACOS nuevos (prefijo 4335619):
+ *   - Validación estricta del logo amarillo "RECICLA Al Amarillo".
+ *     Si logo_reciclaje_amarillo=false → EXCEPCION.
+ *   - Aviso de workflow productivo pendiente de crear
+ *     (verifica-etiqueta-tacos-lidl) cuando se detecta el prefijo 4335619.
+ *   - Silencia el motivo genérico "producto de tipo nuevo" para MELON/SANDIA/MIX
+ *     cuando ya se dispara el motivo específico LIDL TACOS.
+ *   - Requiere prompt v1.2 con el nuevo campo logo_reciclaje_amarillo.
  *
  * v1.3 — Fix ean_prefijo con lógica propia:
  *   - "OK (rellenado)" reemplazado por "DIFIERE (BD tiene EAN pero foto no)"
@@ -385,6 +394,46 @@ if (estadoEanPrefijo.startsWith("DIFIERE")) {
   );
 }
 
+// ============================================================
+// LIDL CHEF SELECT TACOS nuevos (prefijo EAN 4335619)
+// ============================================================
+// Grupo de productos LIDL Chef Select "TACOS" (piña, coco, melón, sandía, mix)
+// con EAN-13 fijo prefijo 4335619 y logo amarillo "RECICLA Al Amarillo" obligatorio.
+// Requieren workflow productivo dedicado (pendiente crear: verifica-etiqueta-tacos-lidl).
+// Se identifican por:
+//  - Prefijo EAN 4335619 (en detectado o rellenado).
+//  - O por nombre_sap "LIDL ... CHEF SELECT" + "TACOS".
+
+const esLidlChefSelectTacos = (
+  (/4335619/.test(prefijoDetectado || "") || /4335619/.test(prefijoRellenado || "")) ||
+  (/LIDL/i.test(clienteRellenado) &&
+   /CHEF\s*SELECT/i.test(nombreSapRellenado) &&
+   /TACOS/i.test(nombreSapRellenado))
+);
+
+if (esLidlChefSelectTacos) {
+  // Validación estricta: DEBE tener logo amarillo de reciclaje
+  if (detectado.logo_reciclaje_amarillo === false) {
+    motivosExcepcion.push(
+      `Producto LIDL Chef Select TACOS (prefijo EAN 4335619) debe llevar el logo amarillo ` +
+      `"RECICLA Al Amarillo" en la etiqueta, pero la IA NO lo detectó. Requiere: ` +
+      `(1) verificar visualmente si la etiqueta lo lleva (por si la IA no lo vio bien); ` +
+      `(2) si NO lo lleva, contactar con LIDL para que actualice el diseño antes de activar el producto.`
+    );
+  }
+  // Aviso workflow pendiente: hasta que exista el workflow productivo dedicado
+  motivosExcepcion.push(
+    `Producto LIDL Chef Select TACOS con prefijo EAN 4335619 detectado. Este grupo de productos ` +
+    `(piña, coco, melón, sandía, mix) requiere un workflow productivo dedicado en n8n que ` +
+    `todavía NO existe. NO ACTIVAR hasta: ` +
+    `(1) crear workflow 'verifica-etiqueta-tacos-lidl' clonando piña como base; ` +
+    `(2) ajustar el Code node para identificar por prefijo 4335619 + validación logo amarillo + ` +
+    `formato lote 3 dígitos (juliano); ` +
+    `(3) actualizar 'src/App.vue' para enrutar productos con prefijo 4335619 al nuevo webhook; ` +
+    `(4) crear snapshot 'docs/workflows/tacos-lidl.js' y esta heurística cubierta.`
+  );
+}
+
 // ETIQUETA DE CAJA marcada — el análisis del bote NO cubre la etiqueta de la caja.
 // La verificación de la caja se hace en el webhook separado
 // `analisis-etiqueta-alta-CAJA` (misma URL base, sufijo -CAJA).
@@ -502,11 +551,15 @@ const motivosNoCubiertos = motivosExcepcion.filter(m => {
   const esIdioma = /Idioma "/i.test(m);
   const esColisionPrefijo = /Prefijo EAN colisiona/i.test(m);
   const esTacosNoDelmonte = /TACOS pero cliente/i.test(m);
+  const esTipoProductoNuevoGenerico = /Producto de tipo nuevo\. El nombre_sap/i.test(m);
 
   if (esSinEan && heuristicasCubiertas.some(h => h.motivo_cubierto === "sin_ean")) return false;
   if (esIdioma && heuristicasCubiertas.some(h => h.motivo_cubierto === "idioma_catalan")) return false;
   if (esColisionPrefijo && heuristicasCubiertas.some(h => h.motivo_cubierto === "colision_prefijo_LIDL")) return false;
   if (esTacosNoDelmonte && heuristicasCubiertas.some(h => h.motivo_cubierto === "tacos_no_delmonte")) return false;
+  // LIDL Chef Select TACOS nuevos ya tienen su propio motivo específico (más detallado).
+  // Silenciamos el motivo genérico "producto de tipo nuevo" para evitar duplicación.
+  if (esTipoProductoNuevoGenerico && esLidlChefSelectTacos) return false;
 
   return true;
 });

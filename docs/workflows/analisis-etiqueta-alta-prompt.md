@@ -2,6 +2,11 @@
 
 Este prompt se usa con OpenAI gpt-4o-mini (o modelo compatible con visión). Devuelve JSON estricto que el Code node parsea directamente.
 
+### Versión 1.2 — 2026-07-20
+
+Añadido:
+- Regla 11 (LOGO RECICLAJE AMARILLO): detección específica del logo amarillo "RECICLA Al Amarillo" para validación estricta en LIDL Chef Select TACOS nuevos (prefijo EAN 4335619).
+
 ### Versión 1.1 — 2026-07-06
 
 Refinado tras primera prueba real:
@@ -80,6 +85,8 @@ REGLAS DE OBSERVACIÓN:
 
 10. PRODUCTO_TEXTO: El nombre visible del producto en la etiqueta ("PIÑA RODAJAS", "COCO TROCEADO", "PIÑA EN TACOS", "SANDÍA TROCEADA", etc.).
 
+11. LOGO RECICLAJE AMARILLO: detecta si aparece un logo/pictograma AMARILLO de reciclaje. Suele mostrar el texto "RECICLA Al Amarillo" (o similar como "Recicla al amarillo", "Al Amarillo") junto a un pictograma de una figura humana echando algo a un contenedor. El color amarillo es distintivo — es un cuadrado o rectángulo amarillo pequeño (típicamente en una esquina de la etiqueta). NO confundir con logos de reciclaje genéricos (triángulos, flechas verdes) que NO son amarillos. Solo `true` si ves claramente el color amarillo + texto "amarillo" o "Al Amarillo".
+
 FORMATO DE RESPUESTA (JSON ESTRICTO, sin comentarios, sin texto fuera del JSON):
 
 {
@@ -99,7 +106,8 @@ FORMATO DE RESPUESTA (JSON ESTRICTO, sin comentarios, sin texto fuera del JSON):
   "idioma": "<español | catalán | italiano | portugués | otro>",
   "marca_logo": "<string o null>",
   "origen": "<string o null>",
-  "producto_texto": "<string o null>"
+  "producto_texto": "<string o null>",
+  "logo_reciclaje_amarillo": <true|false>
 }
 
 Devuelve SOLO el JSON, sin explicaciones, sin markdown, sin nada fuera de las llaves.

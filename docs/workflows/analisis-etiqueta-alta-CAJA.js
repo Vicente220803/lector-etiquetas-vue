@@ -1,7 +1,23 @@
 /**
  * NODO: Code JavaScript - ANALISIS ETIQUETA CAJA (Capa 2)
- * Versión: 1.0
- * ultima_actualizacion: 2026-07-08
+ * Versión: 1.2
+ * ultima_actualizacion: 2026-07-20
+ *
+ * v1.2 — Chequeo coherencia mejorado: también compara tipo de producto:
+ *   - Además del cliente, comprueba PIÑA vs COCO dentro del mismo cliente.
+ *   - Ejemplo: producto rellenado "COCO TACOS ALDI" + caja detectada patrón
+ *     "ALDI PIÑA" → mismo cliente ALDI pero tipos distintos → INCOHERENTE.
+ *   - Los mensajes de recomendación distinguen si el problema es cliente
+ *     o tipo de producto.
+ *
+ * v1.1 — Chequeo coherencia cliente:
+ *   - Si productoRellenado.cliente tiene valor y NO coincide con el cliente
+ *     de ningún patrón matcheado, marca estado="INCOHERENTE" con recomendación
+ *     "la foto no corresponde al producto que estás dando de alta".
+ *   - Comparación por String.includes() en ambas direcciones para tolerar
+ *     "DELMONTE" vs "DELMONTE COCO" o "MERCADONA" vs "MERCADONA SA".
+ *   - Si productoRellenado.cliente está vacío, se salta el chequeo
+ *     (modo exploratorio: el compa aún no sabe el cliente).
  *
  * Snapshot desde n8n. NO editar aquí — la fuente de verdad es n8n.
  * Sincronizar tras cualquier cambio en el workflow.
@@ -163,12 +179,81 @@ const matches = PATRONES_CAJA_SOPORTADOS.filter(p => {
 });
 
 // ============================================================
+// 2b. CHEQUEO DE COHERENCIA (v1.2)
+// ============================================================
+// Dos capas:
+//  1) CLIENTE: si productoRellenado.cliente no coincide con ningún matched.
+//  2) TIPO PRODUCTO: si cliente OK pero nombre_sap indica PIÑA y patrón COCO
+//     (o al revés), sigue siendo incoherente aunque el cliente base coincida.
+// Comparación por String.includes() en ambas direcciones para tolerar
+// "DELMONTE" vs "DELMONTE COCO" o "MERCADONA" vs "MERCADONA SA".
+// Si productoRellenado.cliente está vacío se salta todo el chequeo.
+
+const clienteRellenadoUpper = String(productoRellenado.cliente || "").toUpperCase().trim();
+const hayClienteRellenado = clienteRellenadoUpper.length > 0;
+const nombreSapUpper = String(productoRellenado.nombre_sap || "").toUpperCase();
+const rellenadoEsPina = /PI[ÑN]A/.test(nombreSapUpper);
+const rellenadoEsCoco = /COCO/.test(nombreSapUpper);
+
+let clienteIncoherente = false;
+let tipoProductoIncoherente = false;
+
+if (hayClienteRellenado && matches.length > 0) {
+  // Capa 1 — cliente
+  const algunMatchCliente = matches.some(m => {
+    const patronClienteUpper = String(m.cliente || "").toUpperCase().trim();
+    return patronClienteUpper.includes(clienteRellenadoUpper) ||
+           clienteRellenadoUpper.includes(patronClienteUpper);
+  });
+  clienteIncoherente = !algunMatchCliente;
+
+  // Capa 2 — tipo producto (solo si cliente OK y nombre_sap especifica piña/coco)
+  if (!clienteIncoherente && (rellenadoEsPina || rellenadoEsCoco)) {
+    const algunMatchTipo = matches.some(m => {
+      const patronTexto = (String(m.cliente || "") + " " + String(m.descripcion || "")).toUpperCase();
+      const patronEsPina = /PI[ÑN]A/.test(patronTexto);
+      const patronEsCoco = /COCO/.test(patronTexto);
+      // Si el patrón no especifica ni piña ni coco (ej. MERCADONA SA genérico) asumimos OK.
+      if (!patronEsPina && !patronEsCoco) return true;
+      if (rellenadoEsPina && patronEsPina) return true;
+      if (rellenadoEsCoco && patronEsCoco) return true;
+      return false;
+    });
+    tipoProductoIncoherente = !algunMatchTipo;
+  }
+}
+
+const esIncoherente = clienteIncoherente || tipoProductoIncoherente;
+
+// ============================================================
 // 3. CLASIFICACIÓN Y RECOMENDACIÓN
 // ============================================================
 
 let estado, clasificacion, recomendacion;
 
-if (matches.length === 1) {
+if (esIncoherente) {
+  estado = "INCOHERENTE";
+  clasificacion = "EXCEPCION";
+  const clientesPatron = matches.map(m => m.cliente).join(" o ");
+  if (clienteIncoherente) {
+    recomendacion =
+      `⚠️ La foto de la caja NO corresponde al producto que estás dando de alta. ` +
+      `El producto rellenado tiene cliente "${productoRellenado.cliente}" pero la caja ` +
+      `detectada es de "${clientesPatron}". Verifica que subiste la foto correcta y ` +
+      `vuelve a intentar. Si de verdad quieres analizar la caja de otro cliente, ` +
+      `selecciona primero el producto correcto en Maestros.`;
+  } else {
+    // tipoProductoIncoherente — mismo cliente pero producto distinto (piña vs coco)
+    const tipoRellenado = rellenadoEsPina ? "PIÑA" : "COCO";
+    const tipoPatron = rellenadoEsPina ? "COCO" : "PIÑA";
+    recomendacion =
+      `⚠️ Cliente correcto pero el TIPO de producto no coincide. El producto ` +
+      `rellenado es "${productoRellenado.nombre_sap}" (${tipoRellenado}) pero la caja ` +
+      `detectada es de ${tipoPatron} ("${clientesPatron}"). Probablemente subiste la ` +
+      `foto de la caja equivocada. Verifica que la foto es de la caja del producto ` +
+      `correcto y vuelve a intentar.`;
+  }
+} else if (matches.length === 1) {
   estado = "SOPORTADO";
   clasificacion = "ESTANDAR";
   recomendacion =
