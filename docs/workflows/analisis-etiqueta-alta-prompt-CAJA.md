@@ -4,6 +4,14 @@ Este prompt se usa con OpenAI gpt-4o-mini cuando el compa sube una **segunda fot
 
 Devuelve JSON estricto con las señas identificativas de la caja para poder cruzarlas contra los patrones que hoy reconoce el workflow `caja` (MERCADONA por código 948716, ALDI por 6012873, CONSUM por DUN 3843701912201, DELMONTE por EAN 18721008388387 o texto "COCO DEL MONTE", etc.).
 
+### Versión 1.1 — 2026-07-20
+
+Refinado tras primera prueba con caja DELMONTE COCO (la IA metió "India" —país de origen— en `proveedor_nombre`).
+- Añadido campo `origen` separado.
+- Regla 10 (proveedor) endurecida: debe ser entidad empresarial con razón social (S.L.U., S.A., Ltd., etc.), NUNCA un país.
+- Regla 11 nueva (ORIGEN): explícitamente separada del proveedor.
+- Regla adicional: "país ≠ proveedor".
+
 ### Versión 1.0 — 2026-07-08
 
 ### Prompt
@@ -35,12 +43,15 @@ SEÑAS TÍPICAS QUE APARECEN EN ETIQUETAS DE CAJA (extráelas si están presente
 
 9. LOTE DE LA CAJA: si aparece "Lote:" seguido de dígitos.
 
-10. NOMBRE DEL PROVEEDOR: quien fabrica la caja (ej. "Surexport Levante, S.L.U.").
+10. NOMBRE DEL PROVEEDOR: nombre de la EMPRESA/RAZÓN SOCIAL que fabrica o distribuye la caja. DEBE contener claramente una forma jurídica ("S.L.", "S.L.U.", "S.A.", "S.A.U.", "Ltd", "GmbH", "Inc.") o al menos un nombre propio de empresa (ej. "Surexport Levante, S.L.U.", "Del Monte Fresh Produce"). **NO es un país**. Si solo ves un país (India, España, Costa Rica...) eso NO es el proveedor — va en el campo `origen` (regla 11), NO aquí.
+
+11. ORIGEN: país de origen del producto. Suele aparecer después de textos como "Origen:", "Origen del producto:", "Country of origin:", "País:", seguido de un país (ej. "India", "Costa Rica", "Costa de Marfil", "España", "Ecuador"). Este dato SIEMPRE va al campo `origen`, NUNCA al campo `proveedor_nombre`.
 
 REGLAS:
 - NO adivines. Si algo no está claramente visible, marca null.
 - Si ves un número de barras pero no puedes distinguir si es DUN de 14 dig o EAN-13, cuenta los dígitos.
 - El "Código de proveedor" y el "Código de artículo" son cosas DISTINTAS. No los confundas.
+- **PAÍS ≠ PROVEEDOR**: un país (India, España, Costa Rica...) NO puede ir en `proveedor_nombre`. Va en `origen`. El proveedor siempre es una empresa/razón social.
 
 FORMATO DE RESPUESTA (JSON ESTRICTO, sin comentarios, sin texto fuera del JSON):
 
@@ -55,7 +66,8 @@ FORMATO DE RESPUESTA (JSON ESTRICTO, sin comentarios, sin texto fuera del JSON):
   "unidades_por_caja": "<string tal cual (ej. '6 UNIDADES') o null>",
   "fecha_caducidad": "<string tal cual o null>",
   "lote": "<string tal cual o null>",
-  "proveedor_nombre": "<string tal cual (ej. 'Surexport Levante, S.L.U.') o null>"
+  "proveedor_nombre": "<string con nombre de EMPRESA tal cual (ej. 'Surexport Levante, S.L.U.') o null. Si solo ves un país, marca null aquí y ponlo en 'origen'>",
+  "origen": "<string con país tal cual (ej. 'India', 'Costa Rica') o null>"
 }
 
 Devuelve SOLO el JSON, sin explicaciones, sin markdown, sin nada fuera de las llaves.

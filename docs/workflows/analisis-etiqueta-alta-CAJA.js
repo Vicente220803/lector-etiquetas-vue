@@ -269,7 +269,9 @@ if (esIncoherente) {
     senasCaja.dun_ean14 ? `DUN="${senasCaja.dun_ean14}"` : null,
     senasCaja.marca_texto_identificativo ? `marca="${senasCaja.marca_texto_identificativo}"` : null,
     senasCaja.formato ? `formato="${senasCaja.formato}"` : null,
-    senasCaja.producto_texto ? `producto="${senasCaja.producto_texto}"` : null
+    senasCaja.producto_texto ? `producto="${senasCaja.producto_texto}"` : null,
+    senasCaja.origen ? `origen="${senasCaja.origen}"` : null,
+    senasCaja.proveedor_nombre ? `proveedor="${senasCaja.proveedor_nombre}"` : null
   ].filter(Boolean).join(", ");
   recomendacion =
     `Workflow caja NO reconoce esta caja. Detectado: ${senasResumen || 'nada identificable'}. ` +
