@@ -1,7 +1,15 @@
 /**
  * NODO: Code JavaScript - ANALISIS ETIQUETA CAJA (Capa 2)
- * Versión: 1.2
+ * Versión: 1.3
  * ultima_actualizacion: 2026-07-20
+ *
+ * v1.3 — Chequeo calidad foto (auto-eval IA + defensivo):
+ *   - Si senasCaja.calidad_foto === "mala" → REINTENTAR.
+ *   - Chequeo defensivo: si NO hay ningún código identificador
+ *     (codigo_proveedor/codigo_articulo/dun_ean14/marca_texto_identificativo),
+ *     forzar calidad_foto = "mala".
+ *   - Si "regular" → añade nota informativa "verifica manual".
+ *   - Requiere prompt CAJA v1.2 con nuevo campo calidad_foto.
  *
  * v1.2 — Chequeo coherencia mejorado: también compara tipo de producto:
  *   - Además del cliente, comprueba PIÑA vs COCO dentro del mismo cliente.
@@ -114,6 +122,40 @@ try {
       mensaje_error: "La IA no devolvió JSON válido.",
       raw_ia: fullText,
       detalle: String(e)
+    }
+  }];
+}
+
+// ============================================================
+// 1b. CHEQUEO CALIDAD DE FOTO (v1.3)
+// ============================================================
+// Auto-evaluación IA (calidad_foto) + chequeo defensivo por ausencia de códigos
+// identificadores. Si la IA es optimista y dice "buena" pero no hay ni
+// código_proveedor, ni código_articulo, ni DUN, ni marca → forzar "mala".
+
+const noHayCodigoIdentificador =
+  !senasCaja.codigo_proveedor &&
+  !senasCaja.codigo_articulo &&
+  !senasCaja.dun_ean14 &&
+  !senasCaja.marca_texto_identificativo;
+
+if (noHayCodigoIdentificador) {
+  senasCaja.calidad_foto = "mala";
+}
+
+if (senasCaja.calidad_foto === "mala") {
+  return [{
+    json: {
+      error: true,
+      clasificacion: "REINTENTAR",
+      calidad_foto: "mala",
+      mensaje_error:
+        "La foto de la caja es de baja calidad y no se pueden identificar códigos " +
+        "(proveedor, artículo, DUN o marca). Por favor, repite la foto asegurando: " +
+        "(1) buena iluminación; " +
+        "(2) enfoque nítido; " +
+        "(3) la etiqueta de la caja bien encuadrada, incluyendo los códigos.",
+      senas_detectadas: senasCaja
     }
   }];
 }
@@ -289,6 +331,14 @@ if (esIncoherente) {
 // ============================================================
 // 4. RESPUESTA
 // ============================================================
+
+// Aviso de calidad regular (v1.3) — se añade a la recomendación existente.
+if (senasCaja.calidad_foto === "regular") {
+  recomendacion =
+    "⚠️ Foto con calidad REGULAR — algunos datos pueden tener dudas. Verifica manualmente " +
+    "los campos detectados antes de activar. Si no estás seguro, repite la foto con mejor " +
+    "luz/enfoque.\n\n" + recomendacion;
+}
 
 return [{
   json: {

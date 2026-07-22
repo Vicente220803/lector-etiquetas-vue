@@ -540,6 +540,10 @@ const webhookUrl = 'https://surexportlevante.app.n8n.cloud/webhook/65eeb484-7bfd
 const webhookCocoUrl = 'https://surexportlevante.app.n8n.cloud/webhook/842d2503-5f47-41e2-8388-17cbbdbc5a09'
 const webhookCajaUrl = 'https://surexportlevante.app.n8n.cloud/webhook/d8a44c23-fed4-499b-8546-bea698e04cd1'
 const webhookTacosFrontalUrl = 'https://surexportlevante.app.n8n.cloud/webhook/tacos-frontal'
+// Workflow productivo LIDL Chef Select TACOS (prefijo EAN 4335619).
+// Cubre los 5 SKUs: piña, coco, melón, sandía y mix. Se enruta por nombre_sap
+// del producto (contiene "CHEF SELECT" + "TACOS"/"MIX") en la función enviarAOCR.
+const webhookTacosLidlUrl = 'https://surexportlevante.app.n8n.cloud/webhook/3f579972-e216-4b16-8a4b-ebb531e0d1fc'
 const webhookInformeTurnoUrl = 'https://surexportlevante.app.n8n.cloud/webhook/6e531e4e-2a41-46d6-ae7e-7a2a6e8bb578'
 const webhookEmailEtiquetaUrl = 'https://surexportlevante.app.n8n.cloud/webhook/2306cff7-de6a-41c0-a05d-b97f12b43eb8'
 
@@ -1901,7 +1905,18 @@ const enviarAOCR = async (file) => {
     formDataSend.append('fase', verifyParams.fase)
   }
 
-  const urlOCR = modoProducto.value === 'coco' ? webhookCocoUrl : webhookUrl
+  // Enrutamiento del webhook:
+  // 1. LIDL Chef Select TACOS nuevos (5 SKUs: piña, coco, melón, sandía, mix)
+  //    tienen prefijo EAN 4335619 y su propio workflow productivo.
+  //    Se detectan por el nombre_sap del producto que envía el padre.
+  // 2. Si no es LIDL Chef Select TACOS → workflow piña o coco según modoProducto.
+  const nombreProdUpper = String(producto.value || verifyParams?.producto || '').toUpperCase()
+  const esTacosLidlNuevo = /LIDL/.test(nombreProdUpper) &&
+                            /CHEF\s*SELECT/.test(nombreProdUpper) &&
+                            /TACOS|MIX/.test(nombreProdUpper)
+  const urlOCR = esTacosLidlNuevo
+    ? webhookTacosLidlUrl
+    : (modoProducto.value === 'coco' ? webhookCocoUrl : webhookUrl)
 
   try {
     const response = await fetch(urlOCR, {

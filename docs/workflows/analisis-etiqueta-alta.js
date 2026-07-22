@@ -1,12 +1,42 @@
 /**
  * NODO: Code JavaScript - ANALISIS ETIQUETA ALTA CLIENTE NUEVO
- * Versión: 1.4
- * ultima_actualizacion: 2026-07-20
+ * Versión: 1.7
+ * ultima_actualizacion: 2026-07-21
  *
  * NOTA arquitectónica: el análisis de la etiqueta de CAJA (Capa 2) se hace
  * en un webhook SEPARADO dentro del mismo workflow: analisis-etiqueta-alta-CAJA.
  * Ver docs/workflows/analisis-etiqueta-alta-CAJA.js para el Code node de
  * ese webhook.
+ *
+ * v1.7 — LIDL Chef Select TACOS pasa a heurística cubierta:
+ *   - Ya existe el workflow productivo 'verifica-etiqueta-tacos-lidl' en n8n
+ *     (ver docs/workflows/tacos-lidl.js).
+ *   - Se elimina el motivo "workflow pendiente crear" que disparaba EXCEPCION.
+ *   - Se añade heurística cubierta 'tipo_producto_nuevo_lidl_tacos' en
+ *     sección 4b para que estos 5 productos salgan como ESTANDAR con nota
+ *     informativa.
+ *   - workflowDestino = "tacos-lidl" cuando aplique.
+ *   - Ampliada normalización defensiva del lote: acepta también "1 XXX"
+ *     (1 fijo + 3 dígitos julianos, formato LIDL Chef Select TACOS).
+ *   - Sigue vigente la validación estricta del logo amarillo obligatorio.
+ *   - Sigue vigente la validación info nutricional del Mix.
+ *
+ * v1.6 — Validación info nutricional del Mix LIDL Chef Select TACOS:
+ *   - Extracción del objeto info_nutricional (todos los productos).
+ *   - Validación ESTRICTA para el Mix (nombre_sap contiene "MIX" + prefijo
+ *     EAN 4335619): comparación exacta normalizada (sin margen numérico)
+ *     contra los valores esperados hardcoded. Si algún campo no coincide o
+ *     no aparece → EXCEPCION con lista de errores específicos.
+ *   - Protege contra 2 escenarios: valor mal impreso ("44" → "43") y
+ *     palabra borrada (campo detectado como null).
+ *   - Requiere prompt v1.4 con campo info_nutricional.
+ *
+ * v1.5 — Chequeo calidad foto (auto-eval IA + defensivo):
+ *   - Si detectado.calidad_foto === "mala" → REINTENTAR.
+ *   - Chequeo defensivo: si EAN/fecha_caducidad/lote_formato vacíos,
+ *     forzar calidad_foto = "mala" aunque la IA diga "buena" (optimismo).
+ *   - Si calidad_foto === "regular" → añade nota informativa "verifica manual".
+ *   - Requiere prompt v1.3 con nuevo campo calidad_foto.
  *
  * v1.4 — LIDL Chef Select TACOS nuevos (prefijo 4335619):
  *   - Validación estricta del logo amarillo "RECICLA Al Amarillo".
@@ -137,13 +167,54 @@ try {
 }
 
 // Normalización defensiva: si la IA marcó lote_formato como "otros"
-// pero el ejemplo es exactamente 3 dígitos (típico GUFRESCO/ANTICH),
+// pero el ejemplo es exactamente 3 dígitos (típico GUFRESCO/ANTICH) o
+// formato "1 XXX" (LIDL Chef Select TACOS: prefijo 1 fijo + 3 dígitos julianos),
 // lo re-clasificamos como "3 dígitos" para que las heurísticas matcheen.
 if (
   detectado.lote_formato === "otros" &&
-  /^\d{3}$/.test(String(detectado.lote_ejemplo || "").trim())
+  (/^\d{3}$/.test(String(detectado.lote_ejemplo || "").trim()) ||
+   /^1\s+\d{3}$/.test(String(detectado.lote_ejemplo || "").trim()))
 ) {
   detectado.lote_formato = "3 dígitos";
+}
+
+// ============================================================
+// 1b. CHEQUEO CALIDAD DE FOTO (v1.5)
+// ============================================================
+// Auto-evaluación de la IA (calidad_foto) + chequeo defensivo por campos
+// críticos vacíos. La IA a veces es optimista y dice "buena" cuando
+// falta algún dato → forzamos "mala" si detectamos campos críticos ausentes.
+
+const eanNoLegible = !detectado.ean_completo ||
+                     String(detectado.ean_completo).toLowerCase() === "no_legible";
+const fechaCaducidadVacia = !detectado.fecha_caducidad;
+const loteNoDetectado = detectado.lote_formato === "no_detectado" || !detectado.lote_formato;
+
+// Excepción: los productos SIN EAN (tipo_ean="sin_ean") tienen EAN vacío intencionadamente
+// (GUFRESCO, ALABAU, ANTICH...). No forzamos "mala" solo por eso.
+const esSinEanValido = detectado.tipo_ean === "sin_ean";
+
+// Chequeo defensivo: si faltan datos críticos, forzar calidad_foto = "mala".
+if ((eanNoLegible && !esSinEanValido) || fechaCaducidadVacia || loteNoDetectado) {
+  detectado.calidad_foto = "mala";
+}
+
+// Si calidad es "mala" (por IA o defensivo), pedir REINTENTAR y salir.
+if (detectado.calidad_foto === "mala") {
+  return [{
+    json: {
+      error: true,
+      clasificacion: "REINTENTAR",
+      calidad_foto: "mala",
+      mensaje_error:
+        "La foto es de baja calidad y no se pueden leer los datos con fiabilidad " +
+        "(EAN, fecha caducidad o lote ilegibles). Por favor, repite la foto asegurando: " +
+        "(1) buena iluminación (evitar sombras y reflejos); " +
+        "(2) enfoque nítido; " +
+        "(3) etiqueta completa en el encuadre, no cortada.",
+      detectado_en_etiqueta: detectado
+    }
+  }];
 }
 
 // Productos activos en BD
@@ -421,17 +492,88 @@ if (esLidlChefSelectTacos) {
       `(2) si NO lo lleva, contactar con LIDL para que actualice el diseño antes de activar el producto.`
     );
   }
-  // Aviso workflow pendiente: hasta que exista el workflow productivo dedicado
-  motivosExcepcion.push(
-    `Producto LIDL Chef Select TACOS con prefijo EAN 4335619 detectado. Este grupo de productos ` +
-    `(piña, coco, melón, sandía, mix) requiere un workflow productivo dedicado en n8n que ` +
-    `todavía NO existe. NO ACTIVAR hasta: ` +
-    `(1) crear workflow 'verifica-etiqueta-tacos-lidl' clonando piña como base; ` +
-    `(2) ajustar el Code node para identificar por prefijo 4335619 + validación logo amarillo + ` +
-    `formato lote 3 dígitos (juliano); ` +
-    `(3) actualizar 'src/App.vue' para enrutar productos con prefijo 4335619 al nuevo webhook; ` +
-    `(4) crear snapshot 'docs/workflows/tacos-lidl.js' y esta heurística cubierta.`
-  );
+  // Nota: el workflow productivo 'verifica-etiqueta-tacos-lidl' ya existe en n8n
+  // (creado 2026-07-21). Ver docs/workflows/tacos-lidl.js. La heurística cubierta
+  // de más abajo (sección 4b) evita que este grupo dispare EXCEPCION por
+  // "producto de tipo nuevo".
+}
+
+// ============================================================
+// VALIDACIÓN INFO NUTRICIONAL - Mix LIDL Chef Select TACOS (v1.6)
+// ============================================================
+// Solo aplica al producto Mix (nombre_sap contiene MIX + prefijo 4335619 o
+// EAN completo 4335619496316). Valores hardcoded según etiqueta oficial.
+// Comparación EXACTA normalizada (sin margen numérico) para máxima seguridad
+// sanitaria. Protege contra:
+//  - Valor mal leído/impreso ("44" vs "43").
+//  - Palabra borrada/no impresa (campo detectado como null).
+
+const esMixLidlTacos = esLidlChefSelectTacos && /MIX/i.test(nombreSapRellenado);
+
+if (esMixLidlTacos) {
+  const INFO_NUTRICIONAL_MIX_ESPERADA = {
+    valor_energetico_kj: "185",
+    valor_energetico_kcal: "44",
+    grasas_g: "0",
+    grasas_saturadas_g: "0",
+    hidratos_g: "10",
+    azucares_g: "9,1",
+    proteinas_g: "0,6",
+    sal_g: "0"
+  };
+
+  // Normaliza un valor para comparación: quita unidades, espacios, y unifica decimal.
+  function normalizarValorNutricional(v) {
+    if (v === null || v === undefined || v === "") return "";
+    return String(v)
+      .replace(/kcal|kJ|kj/gi, "")
+      .replace(/g\b/gi, "")
+      .replace(/\s+/g, "")
+      .replace(/\./g, ",")
+      .trim();
+  }
+
+  const infoDet = detectado.info_nutricional || { visible: false };
+  const erroresNutricional = [];
+
+  // Chequeo global: si la IA no vio la sección → error crítico
+  if (!infoDet.visible) {
+    erroresNutricional.push(
+      "La sección 'Información nutricional' NO se detectó en la etiqueta. El producto MIX " +
+      "DEBE llevar tabla nutricional visible (por normativa alimentaria). Posible impresión " +
+      "borrada o foto cortada. Repite la foto asegurando que se vea toda la etiqueta."
+    );
+  } else {
+    // Chequeo campo por campo
+    for (const campo in INFO_NUTRICIONAL_MIX_ESPERADA) {
+      const esperado = INFO_NUTRICIONAL_MIX_ESPERADA[campo];
+      const detectadoRaw = infoDet[campo];
+      // Ausencia: palabra/valor borrado o no leído
+      if (detectadoRaw === null || detectadoRaw === undefined || detectadoRaw === "") {
+        erroresNutricional.push(
+          `Campo '${campo}' NO detectado en la etiqueta (esperado: "${esperado}"). ` +
+          `Posible impresión defectuosa o palabra borrada.`
+        );
+        continue;
+      }
+      // Comparación exacta normalizada
+      if (normalizarValorNutricional(detectadoRaw) !== normalizarValorNutricional(esperado)) {
+        erroresNutricional.push(
+          `Valor de '${campo}' NO coincide con el oficial. Esperado: "${esperado}", ` +
+          `detectado: "${detectadoRaw}". Posible impresión errónea o solapamiento con texto perimetral.`
+        );
+      }
+    }
+  }
+
+  if (erroresNutricional.length > 0) {
+    motivosExcepcion.push(
+      `⚠️ VALIDACIÓN INFO NUTRICIONAL MIX FALLIDA (${erroresNutricional.length} error/es): ` +
+      erroresNutricional.join(" | ") +
+      ` — Verifica visualmente la etiqueta: puede que la impresión esté desplazada, se hayan ` +
+      `solapado palabras con el texto perimetral, o falten campos. NO ACTIVAR/USAR hasta resolver.`
+    );
+  }
 }
 
 // ETIQUETA DE CAJA marcada — el análisis del bote NO cubre la etiqueta de la caja.
@@ -545,6 +687,18 @@ if (
   });
 }
 
+// LIDL Chef Select TACOS nuevos (prefijo EAN 4335619) — workflow tacos-lidl productivo
+// Los 5 SKUs (piña, coco, melón, sandía, mix) van al workflow productivo dedicado
+// 'verifica-etiqueta-tacos-lidl' que ya existe (creado 2026-07-21).
+// El código de App.vue enruta el prefijo 4335619 al webhook nuevo.
+if (esLidlChefSelectTacos) {
+  heuristicasCubiertas.push({
+    workflow: "tacos-lidl",
+    heuristica: "LIDL Chef Select TACOS por prefijo EAN 4335619 (workflow productivo dedicado)",
+    motivo_cubierto: "tipo_producto_nuevo_lidl_tacos"
+  });
+}
+
 // Motivos que quedan sin cubrir por heurística existente
 const motivosNoCubiertos = motivosExcepcion.filter(m => {
   const esSinEan = /sin EAN legible/i.test(m);
@@ -572,6 +726,8 @@ const clasificacion = motivosNoCubiertos.length === 0 ? "ESTANDAR" : "EXCEPCION"
 
 let workflowDestino = "pina";
 if (/COCO/.test(nombreSapRellenado)) workflowDestino = "coco";
+// LIDL Chef Select TACOS nuevos → workflow productivo dedicado
+if (esLidlChefSelectTacos) workflowDestino = "tacos-lidl";
 
 // TACOS DELMONTE tienen flujo especial 3-fases (tarrina + film + caja) que
 // requiere el workflow tacos-frontal para el film. OJO: hay otros productos
@@ -585,6 +741,15 @@ const esTacos3Fases = /TACOS/.test(nombreSapRellenado) && /DELMONTE/i.test(clien
 // ============================================================
 
 const notas = [];
+
+// Aviso de calidad de foto regular (v1.5)
+if (detectado.calidad_foto === "regular") {
+  notas.push(
+    "⚠️ Foto con calidad REGULAR — algunos datos pueden tener dudas (dígitos ambiguos, " +
+    "sombras parciales, enfoque flojo). Verifica manualmente los campos detectados antes " +
+    "de activar el producto. Si dudas, repite la foto con mejor luz/enfoque."
+  );
+}
 
 if (detectado.marca_logo) {
   notas.push(`Marca/logo detectada: "${detectado.marca_logo}". Si hay otro SKU del mismo cliente con marca distinta, puede requerir desambiguación como Chef Select/PRP.`);

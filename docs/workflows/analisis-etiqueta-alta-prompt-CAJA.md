@@ -4,6 +4,12 @@ Este prompt se usa con OpenAI gpt-4o-mini cuando el compa sube una **segunda fot
 
 Devuelve JSON estricto con las señas identificativas de la caja para poder cruzarlas contra los patrones que hoy reconoce el workflow `caja` (MERCADONA por código 948716, ALDI por 6012873, CONSUM por DUN 3843701912201, DELMONTE por EAN 18721008388387 o texto "COCO DEL MONTE", etc.).
 
+### Versión 1.2 — 2026-07-20
+
+Añadido:
+- Regla 12 (CALIDAD DE LA FOTO): auto-evaluación por la IA para permitir REINTENTAR foto cuando la calidad no permite lecturas fiables.
+- Campo `calidad_foto` en el JSON de respuesta.
+
 ### Versión 1.1 — 2026-07-20
 
 Refinado tras primera prueba con caja DELMONTE COCO (la IA metió "India" —país de origen— en `proveedor_nombre`).
@@ -47,6 +53,16 @@ SEÑAS TÍPICAS QUE APARECEN EN ETIQUETAS DE CAJA (extráelas si están presente
 
 11. ORIGEN: país de origen del producto. Suele aparecer después de textos como "Origen:", "Origen del producto:", "Country of origin:", "País:", seguido de un país (ej. "India", "Costa Rica", "Costa de Marfil", "España", "Ecuador"). Este dato SIEMPRE va al campo `origen`, NUNCA al campo `proveedor_nombre`.
 
+12. CALIDAD DE LA FOTO — auto-evaluación. Al final, evalúa la calidad general de la imagen para saber si tus lecturas son fiables:
+
+    - `"buena"`: al menos UNO de los códigos identificadores (código_proveedor / código_articulo / DUN / marca_texto_identificativo) se lee CLARAMENTE. Textos legibles sin dudas.
+
+    - `"regular"`: algún código con dígito ambiguo o marca parcialmente borrosa. Datos legibles pero requieren verificación humana.
+
+    - `"mala"`: NINGÚN código identificador es legible (ni proveedor, ni artículo, ni DUN, ni marca). Textos ilegibles. Foto muy borrosa, cortada o demasiado oscura.
+
+    REGLA CRÍTICA: **si dudas entre "buena" y "regular", marca "regular". Si dudas entre "regular" y "mala", marca "mala"**. Preferible pedir al usuario repetir la foto que devolver datos inventados. Mejor conservador que optimista.
+
 REGLAS:
 - NO adivines. Si algo no está claramente visible, marca null.
 - Si ves un número de barras pero no puedes distinguir si es DUN de 14 dig o EAN-13, cuenta los dígitos.
@@ -67,7 +83,8 @@ FORMATO DE RESPUESTA (JSON ESTRICTO, sin comentarios, sin texto fuera del JSON):
   "fecha_caducidad": "<string tal cual o null>",
   "lote": "<string tal cual o null>",
   "proveedor_nombre": "<string con nombre de EMPRESA tal cual (ej. 'Surexport Levante, S.L.U.') o null. Si solo ves un país, marca null aquí y ponlo en 'origen'>",
-  "origen": "<string con país tal cual (ej. 'India', 'Costa Rica') o null>"
+  "origen": "<string con país tal cual (ej. 'India', 'Costa Rica') o null>",
+  "calidad_foto": "<buena | regular | mala>"
 }
 
 Devuelve SOLO el JSON, sin explicaciones, sin markdown, sin nada fuera de las llaves.

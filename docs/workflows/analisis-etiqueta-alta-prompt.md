@@ -2,6 +2,17 @@
 
 Este prompt se usa con OpenAI gpt-4o-mini (o modelo compatible con visión). Devuelve JSON estricto que el Code node parsea directamente.
 
+### Versión 1.4 — 2026-07-21
+
+Añadido:
+- Regla 13 (INFORMACIÓN NUTRICIONAL): extracción de todos los valores de la tabla nutricional cuando aparece (típico en productos "Mix" que contienen varias frutas). Objeto `info_nutricional` en el JSON de respuesta con visible + valores.
+
+### Versión 1.3 — 2026-07-20
+
+Añadido:
+- Regla 12 (CALIDAD DE LA FOTO): auto-evaluación por la IA para permitir que el sistema pida REINTENTAR foto cuando la calidad no permite lecturas fiables.
+- Campo `calidad_foto` en el JSON de respuesta.
+
 ### Versión 1.2 — 2026-07-20
 
 Añadido:
@@ -87,6 +98,26 @@ REGLAS DE OBSERVACIÓN:
 
 11. LOGO RECICLAJE AMARILLO: detecta si aparece un logo/pictograma AMARILLO de reciclaje. Suele mostrar el texto "RECICLA Al Amarillo" (o similar como "Recicla al amarillo", "Al Amarillo") junto a un pictograma de una figura humana echando algo a un contenedor. El color amarillo es distintivo — es un cuadrado o rectángulo amarillo pequeño (típicamente en una esquina de la etiqueta). NO confundir con logos de reciclaje genéricos (triángulos, flechas verdes) que NO son amarillos. Solo `true` si ves claramente el color amarillo + texto "amarillo" o "Al Amarillo".
 
+12. CALIDAD DE LA FOTO — auto-evaluación. Al final, evalúa la calidad general de la imagen para saber si tus lecturas son fiables:
+
+    - `"buena"`: todos los datos críticos (EAN completo, fecha de caducidad, lote) se leen claramente y sin dudas. Enfoque nítido, sin sombras que oculten información, sin desenfoque.
+
+    - `"regular"`: datos legibles pero con **algún dígito ambiguo** (ej. dudas entre 8 y 3, entre R-11 y R-14). Alguna sombra parcial que dificulta lectura. Enfoque flojo pero texto aún legible. Textos secundarios borrosos pero críticos legibles.
+
+    - `"mala"`: EAN incompleto o no legible (falta algún dígito o hay que adivinar). Fecha caducidad ilegible. Lote no se distingue. Foto muy borrosa, desenfoque severo. Etiqueta cortada / no encuadrada / muy oscura.
+
+    REGLA CRÍTICA: **si dudas entre "buena" y "regular", marca "regular". Si dudas entre "regular" y "mala", marca "mala"**. Es preferible pedir al usuario repetir la foto que devolver datos inventados. Mejor conservador que optimista.
+
+13. INFORMACIÓN NUTRICIONAL — extracción si aparece. Algunas etiquetas (típicamente productos "Mix" que contienen varias frutas o cualquier producto por normativa) incluyen una tabla nutricional con esta estructura:
+
+    "Información nutricional por 100g:
+    Valor energético (XXX kJ / YY kcal), Grasas (Zg), de las cuales saturadas (Zg),
+    Hidratos de carbono (Zg), de los cuales azúcares (Z,Xg), Proteínas (Z,Xg), Sal (Zg)"
+
+    Si aparece, extrae cada valor tal cual (con coma decimal si viene con coma, con punto si viene con punto — NO normalices). Si un campo no está visible o no aparece, marca ese campo como `null`. Si TODA la sección nutricional no aparece en la etiqueta, marca `visible: false` y todos los valores a `null`.
+
+    Importante: extrae SOLO los números y unidades tal cual, sin recalcular ni interpretar. Si ves "44 kcal" pon "44"; si ves "9,1g" pon "9,1"; si ves "0g" pon "0".
+
 FORMATO DE RESPUESTA (JSON ESTRICTO, sin comentarios, sin texto fuera del JSON):
 
 {
@@ -107,7 +138,19 @@ FORMATO DE RESPUESTA (JSON ESTRICTO, sin comentarios, sin texto fuera del JSON):
   "marca_logo": "<string o null>",
   "origen": "<string o null>",
   "producto_texto": "<string o null>",
-  "logo_reciclaje_amarillo": <true|false>
+  "logo_reciclaje_amarillo": <true|false>,
+  "calidad_foto": "<buena | regular | mala>",
+  "info_nutricional": {
+    "visible": <true|false>,
+    "valor_energetico_kj": "<string tal cual (ej. '185') o null>",
+    "valor_energetico_kcal": "<string tal cual (ej. '44') o null>",
+    "grasas_g": "<string tal cual (ej. '0') o null>",
+    "grasas_saturadas_g": "<string tal cual (ej. '0') o null>",
+    "hidratos_g": "<string tal cual (ej. '10') o null>",
+    "azucares_g": "<string tal cual (ej. '9,1') o null>",
+    "proteinas_g": "<string tal cual (ej. '0,6') o null>",
+    "sal_g": "<string tal cual (ej. '0') o null>"
+  }
 }
 
 Devuelve SOLO el JSON, sin explicaciones, sin markdown, sin nada fuera de las llaves.
