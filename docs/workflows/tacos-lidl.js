@@ -1,7 +1,13 @@
 /**
  * NODO: Code JavaScript - VERIFICA ETIQUETA TACOS LIDL
- * Versión: 1.4
+ * Versión: 1.5
  * ultima_actualizacion: 2026-07-22
+ *
+ * v1.5 — Validación cruzada del pictograma "No apto 0-3 años": ahora
+ *   también bloquea si aparece en piña/melón/sandía/mix (donde NO debería
+ *   estar). Antes solo se exigía que el Coco lo llevara; el caso inverso
+ *   (aparece donde no toca) es señal de mezcla de plancha/molde de
+ *   impresión entre SKUs — posible etiqueta mal impresa.
  *
  * v1.4 — Añadido campo `fecha_envasado` en la respuesta final. La etiqueta
  *   NO imprime fecha de envasado (solo caducidad DD/MM), pero se muestra
@@ -231,6 +237,24 @@ if (esCoco && (detectado.pictograma_no_apto_0_3 === false || detectado.pictogram
       ean: eanCompleto,
       ean_bd: producto_bd.ean,
       mensaje_error: `El producto "${producto_bd.nombre_sap}" DEBE llevar el pictograma "No apto para menores de 3 años" (riesgo de asfixia) en la etiqueta, pero NO se detectó. Verifica visualmente y NO continúes si falta.`
+    }
+  }];
+}
+// Caso inverso: el pictograma es EXCLUSIVO del Coco (riesgo de asfixia por
+// trozos duros). Si aparece en piña/melón/sandía/mix, es señal de mezcla de
+// plancha/molde de impresión con el Coco — posible etiqueta mal impresa.
+if (!esCoco && detectado.pictograma_no_apto_0_3 === true) {
+  return [{
+    json: {
+      resultado_v: "ERROR",
+      error_sanitario: true,
+      cliente: "LIDL SUPERMERCADOS, S.A.U",
+      producto_bd: producto_bd.nombre_sap,
+      producto_db: producto_bd.nombre_sap,
+      ean_leido: eanCompleto,
+      ean: eanCompleto,
+      ean_bd: producto_bd.ean,
+      mensaje_error: `El producto "${producto_bd.nombre_sap}" NO debería llevar el pictograma "No apto para menores de 3 años" (ese aviso es exclusivo del Coco, por riesgo de trozos duros). Se ha detectado en esta etiqueta — posible error de impresión (plancha/molde mezclada con el Coco). Verifica visualmente y NO continúes si es así.`
     }
   }];
 }
