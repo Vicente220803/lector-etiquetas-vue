@@ -1,9 +1,30 @@
 /**
  * NODO: Code JavaScript - n8n PIÑA
- * Versión: 7.3 - Bloqueo ANTICH sin lote legible + Barrera EAN-cliente + Desambiguación Chef Select + Barrera producto
- * ultima_actualizacion: 2026-07-01
+ * Versión: 7.5 - Fix BUG real: MIX LIDL Chef Select se colaba como candidato de PIÑA CILINDRO
+ * ultima_actualizacion: 2026-07-22
  * Snapshot desde n8n. NO editar aquí — la fuente de verdad es n8n.
  * Sincronizar tras cualquier cambio en el workflow.
+ *
+ * v7.5 — BUG CONFIRMADO en producción (test n8n directo): al buscar por
+ *   clienteHint=LIDL sin `fase`, el filtro `esTacosSku` solo miraba si
+ *   nombre_sap contenía la palabra "TACOS". "MIX PI-MEL-UVA 06X230 LIDL GR
+ *   CHEFSELECT" NO contiene esa palabra, así que caía en el mismo grupo que
+ *   "PIÑA CILINDRO 06X540 LIDL VD CHEF SELECT" y `.find()` podía devolver
+ *   el Mix en vez del Cilindro (orden no determinista de Supabase). La
+ *   barrera BOTE EQUIVOCADO lo detectó y bloqueó correctamente, pero el
+ *   origen del problema estaba en la identificación, no en la barrera.
+ *   Fix: excluir SIEMPRE el grupo LIDL Chef Select TACOS (prefijo EAN
+ *   4335619 — piña/coco/melón/sandía/mix) de esta búsqueda, ya que tiene
+ *   su propio workflow productivo dedicado (tacos-lidl.js) y no debe
+ *   competir aquí bajo ningún caso.
+ *
+ * v7.4 — P+X ya no depende del día de la semana. Se valida como rango
+ *   tolerado [p_x_min, p_x_max] leído directamente del producto en BD.
+ *   Las columnas viejas (p_x_d_l_m_x, p_x_j, p_x_v) siguen en BD pero
+ *   el código ya no las lee. Caso especial "Maskom" (nombre sin acentuar,
+ *   posible desajuste con BD) mantiene su rango fijo 8-8 hardcoded.
+ *
+ * v7.3 - Bloqueo ANTICH sin lote legible + Barrera EAN-cliente + Desambiguación Chef Select + Barrera producto
  */
 
 let iaFalloTotalmente = false;
@@ -306,6 +327,12 @@ let pDb = null;
 
 // 1. Prioridad: cliente desde la orden (verify mode) → autoridad directa
 //    Disambiguación DELMONTE: si llega `fase` → TACOS; sin fase → cilindro/rodajas
+//    LIDL Chef Select TACOS (prefijo EAN 4335619: piña/melón/sandía/mix/coco)
+//    tiene workflow productivo PROPIO (tacos-lidl.js) — se excluye siempre de
+//    aquí para que nunca compita con PIÑA CILINDRO ni con el flujo `fase` de
+//    DELMONTE. Sin esta exclusión, "MIX ... CHEFSELECT" (sin la palabra
+//    "TACOS" en el nombre) caía en el mismo grupo que PIÑA CILINDRO y podía
+//    ser elegido por error al buscar por clienteHint=LIDL.
 if (clienteHint) {
   const esTacosFlow = fase !== null;
   pDb = activos.find(p => {
@@ -313,6 +340,8 @@ if (clienteHint) {
     const matchAlias = String(p.json.cliente_alias || "").toUpperCase() === clienteHint;
     if (!matchCliente && !matchAlias) return false;
     if (!esActivo(p.json.en_activo)) return false;
+    const esLidlChefSelectTacosGroup = String(p.json.ean || "").startsWith("4335619");
+    if (esLidlChefSelectTacosGroup) return false;
     const esTacosSku = /TACOS/i.test(String(p.json.nombre_sap || ""));
     return esTacosFlow ? esTacosSku : !esTacosSku;
   })?.json;
@@ -331,6 +360,7 @@ if (pDb && clienteHint) {
     const cA = String(p.json.cliente_alias || "").toUpperCase();
     const matchCli = c === clienteHint || cA === clienteHint;
     if (!matchCli) return false;
+    if (String(p.json.ean || "").startsWith("4335619")) return false;
     const esTacosSku = /TACOS/i.test(String(p.json.nombre_sap || ""));
     return esTacosFlow ? esTacosSku : !esTacosSku;
   }).map(p => p.json);
@@ -516,7 +546,7 @@ const diasSemana = ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERN
 const diaSemanaIndex = dReferencia.getDay();
 const diaSemanaText = diasSemana[diaSemanaIndex];
 
-let val = { p_x_leido: 0, p_x_esperado: 0, alerta: false, mensaje: "" };
+let val = { p_x_leido: 0, p_x_min: 0, p_x_max: 0, alerta: false, mensaje: "" };
 
 if (dReferencia && dCad) {
     const diffTime = dCad.getTime() - dReferencia.getTime();
@@ -550,26 +580,20 @@ if (fase === 'tarrina') {
     val.mensaje = "PESO NO LEÍDO";
 } else if (pDb) {
     if (clienteFinal === "Maskom") {
-        val.p_x_esperado = 8;
+        val.p_x_min = 8;
+        val.p_x_max = 8;
     } else {
-        const diaSemana = dReferencia.getDay();
-        let pxTeorico;
-        if (diaSemana === 5) {
-            pxTeorico = pDb.p_x_v || pDb.p_x_j || 9;
-        } else if (diaSemana === 4) {
-            pxTeorico = pDb.p_x_j || 9;
-        } else {
-            pxTeorico = pDb.p_x_d_l_m_x || 9;
-        }
-        val.p_x_esperado = pxTeorico;
+        val.p_x_min = Number(pDb.p_x_min);
+        val.p_x_max = Number(pDb.p_x_max);
     }
 
-    if (val.p_x_leido === val.p_x_esperado) {
+    const pxDentroDeRango = val.p_x_leido >= val.p_x_min && val.p_x_leido <= val.p_x_max;
+    if (pxDentroDeRango) {
         val.alerta = false;
         val.mensaje = "OK";
     } else {
         val.alerta = true;
-        val.mensaje = `P+${val.p_x_leido} (Debe ser P+${val.p_x_esperado})`;
+        val.mensaje = `P+${val.p_x_leido} (debe estar entre P+${val.p_x_min} y P+${val.p_x_max})`;
     }
 } else {
     val.alerta = true;
@@ -632,7 +656,8 @@ codigo_r: clienteFinal === "MERCADONA SA" ? codigoRIA : "",
     px_marcado_usuario: pxMarcadoPorUsuario,
     validacion_px: {
       px_leido: val.p_x_leido,
-      px_esperado: val.p_x_esperado,
+      px_min: val.p_x_min,
+      px_max: val.p_x_max,
       dia_semana_nombre: diaSemanaText,
       resultado: val.mensaje
     },

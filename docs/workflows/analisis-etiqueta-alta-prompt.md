@@ -2,6 +2,16 @@
 
 Este prompt se usa con OpenAI gpt-4o-mini (o modelo compatible con visión). Devuelve JSON estricto que el Code node parsea directamente.
 
+### Versión 1.6 — 2026-07-22
+
+Añadido:
+- Regla 14 (PICTOGRAMA NO APTO 0-3 AÑOS): detección del símbolo de prohibición por riesgo de asfixia (cara de bebé + línea diagonal roja + texto "0-3"), obligatorio en LIDL Chef Select COCO TACOS. Campo `pictograma_no_apto_0_3` en el JSON de respuesta.
+
+### Versión 1.5 — 2026-07-22
+
+Refinado:
+- Regla 8 (MARCA / LOGO): aclaración explícita para NO extraer como marca el nombre del FABRICANTE/PRODUCTOR que aparece típicamente en el ribete perimetral pequeño (ej. "SUREXPORT LEVANTE S.L.U.", "Fabricado por...", "Envasado por..."). Si solo se ve el productor y no hay marca comercial visible, devolver `marca_logo: null`.
+
 ### Versión 1.4 — 2026-07-21
 
 Añadido:
@@ -90,7 +100,19 @@ REGLAS DE OBSERVACIÓN:
    - Catalán: "Data", "Caducitat", "Lot"/"Llot", "Pes net", "Preu", "Import", "Origen".
    - Italiano: "Data", "Scadenza", "Lotto", "Peso netto", "Prezzo", "Importo", "Origine".
 
-8. MARCA / LOGO: Si aparece un logo o texto de marca (Chef Select, Del Monte, Bonpreu, Bio, Premium, Gold, etc.), extráelo. Es info crítica para posibles desambiguaciones futuras. Aunque el logo sea gráfico, si contiene texto legible extráelo.
+8. MARCA / LOGO: Si aparece un logo o texto de marca COMERCIAL (Chef Select, Del Monte, Bonpreu, Bio, Premium, Gold, PRP, etc.), extráelo. Es info crítica para posibles desambiguaciones futuras. Aunque el logo sea gráfico, si contiene texto legible extráelo.
+
+   IMPORTANTE — QUÉ NO CONSIDERAR MARCA:
+   
+   NO extraigas como marca el nombre del FABRICANTE / PRODUCTOR / ENVASADOR, que suele aparecer:
+   - En el ribete perimetral pequeño de la etiqueta (borde exterior, letra minúscula).
+   - Precedido por palabras como "Fabricado por", "Envasado por", "Producido por", "Distribuido por".
+   - Con sufijos societarios "S.L.", "S.L.U.", "S.A.", "S.A.U.", "S.L.N.E.".
+   - Ejemplos concretos que NO son marca: "SUREXPORT LEVANTE S.L.U.", "Bonapiel S.L.", "Frutas García S.A.".
+   
+   El productor es la empresa legal responsable del envasado, NO la marca comercial que el consumidor asocia al producto.
+   
+   Si SOLO ves el nombre del fabricante y NO hay marca comercial visible (ni Chef Select, ni Bio, ni Del Monte, ni nada), devuelve `marca_logo: null`. Es preferible null a un falso positivo con el fabricante.
 
 9. ORIGEN: Extrae el país de origen ("Costa Rica", "Costa de Marfil", "India", "España", "Ecuador", etc.).
 
@@ -118,6 +140,8 @@ REGLAS DE OBSERVACIÓN:
 
     Importante: extrae SOLO los números y unidades tal cual, sin recalcular ni interpretar. Si ves "44 kcal" pon "44"; si ves "9,1g" pon "9,1"; si ves "0g" pon "0".
 
+14. PICTOGRAMA "NO APTO PARA MENORES DE 3 AÑOS" (riesgo de asfixia): detecta si aparece un pictograma circular con la cara de un bebé y una línea diagonal roja que la atraviesa (símbolo de prohibición), acompañado del texto "0-3" o "0-3 años". Es un aviso de seguridad alimentaria por riesgo de atragantamiento, típico en productos con trozos duros o redondeados (coco en trozos). NO confundir con otros pictogramas circulares (reciclaje, refrigeración). Solo `true` si ves claramente la cara del bebé + línea de prohibición + texto "0-3".
+
 FORMATO DE RESPUESTA (JSON ESTRICTO, sin comentarios, sin texto fuera del JSON):
 
 {
@@ -139,6 +163,7 @@ FORMATO DE RESPUESTA (JSON ESTRICTO, sin comentarios, sin texto fuera del JSON):
   "origen": "<string o null>",
   "producto_texto": "<string o null>",
   "logo_reciclaje_amarillo": <true|false>,
+  "pictograma_no_apto_0_3": <true|false>,
   "calidad_foto": "<buena | regular | mala>",
   "info_nutricional": {
     "visible": <true|false>,

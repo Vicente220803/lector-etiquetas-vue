@@ -1,7 +1,25 @@
 /**
  * NODO: Code JavaScript - ANALISIS DE ETIQUETAS coco
- * Versión: 8.4 - GUFRESCO requiere lote 3 dígitos (no se activa con DELMONTE coco) + Barrera EAN-cliente + Barrera producto
- * ultima_actualizacion: 2026-07-01
+ * Versión: 8.6 - P+X migrado a rango p_x_min/p_x_max (antes p_x_d_l_m_x/p_x_j/p_x_v)
+ * ultima_actualizacion: 2026-07-22
+ *
+ * v8.6 — P+X ya no depende del día de la semana. Se valida como rango
+ *   tolerado [p_x_min, p_x_max] leído directamente del producto en BD.
+ *   Las columnas viejas (p_x_d_l_m_x, p_x_j, p_x_v) siguen en BD pero
+ *   el código ya no las lee.
+ *
+ * v8.5 — Este workflow NO es la ruta primaria para LIDL Chef Select TACOS
+ *   (App.vue enruta esos 5 SKUs al workflow dedicado tacos-lidl.js, que sí
+ *   valida logo amarillo, pictograma 0-3 e info nutricional del Mix).
+ *   Este cambio es solo defensa-en-profundidad: si por lo que sea la foto
+ *   llega aquí, que al menos identifique el producto y el lote correctamente
+ *   (fecha DD/MM ya funcionaba genérico, no requería cambios). NO se han
+ *   añadido aquí las validaciones estrictas de logo/pictograma — ese
+ *   workflow no tiene infraestructura de campos booleanos IA (usa regex
+ *   sobre texto plano, no JSON estructurado); si se quiere replicarlas aquí
+ *   haría falta ver el prompt actual del nodo Analyze image de este workflow.
+ *
+ * v8.4 - GUFRESCO requiere lote 3 dígitos (no se activa con DELMONTE coco) + Barrera EAN-cliente + Barrera producto
  * Snapshot desde n8n. NO editar aquí — la fuente de verdad es n8n.
  * Sincronizar tras cualquier cambio en el workflow.
  */
@@ -322,6 +340,17 @@ if ((clienteFinal === "GUFRESCO" || clienteFinal === "OPCIO GELATS SL") && loteI
   }
 }
 
+// Si el producto identificado es LIDL Chef Select TACOS (prefijo EAN 4335619)
+// y el lote sigue sin detectarse, aplicar regex "1 XXX" (1 fijo + 3 dígitos
+// julianos, 5 caracteres). El regex genérico de arriba pide mínimo 6 y no
+// lo captura. Backup del workflow dedicado tacos-lidl.js.
+if (pDb && String(pDb.ean || "").startsWith("4335619") && loteIA === "No detectado") {
+  const loteTacosLidl = extractValue(cleanedText, /Lote:?\s*(\d\s?\d{3})(?!\d)/i);
+  if (loteTacosLidl) {
+    loteIA = loteTacosLidl;
+  }
+}
+
 
 // === BARRERA SANITARIA: PRODUCTO esperado (padre) vs producto detectado (pDb) ===
 // El padre envía datosApp.producto = nombre_sap del producto de la orden.
@@ -355,7 +384,7 @@ const diasSemana = ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERN
 const diaSemanaIndex = dReferencia.getDay();
 const diaSemanaText = diasSemana[diaSemanaIndex];
 
-let val = { p_x_leido: 0, p_x_esperado: 0, alerta: false, mensaje: "" };
+let val = { p_x_leido: 0, p_x_min: 0, p_x_max: 0, alerta: false, mensaje: "" };
 
 if (dReferencia && dCad) {
   const diffTime = dCad.getTime() - dReferencia.getTime();
@@ -369,20 +398,20 @@ if (eanNoLeidoConBd) {
   val.mensaje = "EAN NO LEÍDO";
 } else if (pDb) {
   if (clienteFinal === "Maskom") {
-
-    val.p_x_esperado = 8;
+    val.p_x_min = 8;
+    val.p_x_max = 8;
   } else {
-    const diaSemana = dReferencia.getDay();
-    const pxTeorico = (diaSemana >= 1 && diaSemana <= 3) ? (pDb.p_x_d_l_m_x || 9) : (pDb.p_x_j || 9);
-    val.p_x_esperado = pxTeorico;
+    val.p_x_min = Number(pDb.p_x_min);
+    val.p_x_max = Number(pDb.p_x_max);
   }
 
-  if (val.p_x_leido === val.p_x_esperado) {
+  const pxDentroDeRango = val.p_x_leido >= val.p_x_min && val.p_x_leido <= val.p_x_max;
+  if (pxDentroDeRango) {
     val.alerta = false;
     val.mensaje = "OK";
   } else {
     val.alerta = true;
-    val.mensaje = `P+${val.p_x_leido} (Debe ser P+${val.p_x_esperado})`;
+    val.mensaje = `P+${val.p_x_leido} (debe estar entre P+${val.p_x_min} y P+${val.p_x_max})`;
   }
 } else {
   val.alerta = true;
@@ -456,7 +485,8 @@ return [{
     px_marcado_usuario: pxMarcadoPorUsuario,
     validacion_px: {
       px_leido: val.p_x_leido,
-      px_esperado: val.p_x_esperado,
+      px_min: val.p_x_min,
+      px_max: val.p_x_max,
       dia_semana_nombre: diaSemanaText,
       resultado: val.mensaje
     },

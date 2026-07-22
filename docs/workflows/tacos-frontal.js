@@ -1,14 +1,19 @@
 /**
  * NODO: Code JavaScript - ANALISIS DE ETIQUETA FRONTAL Del Monte Tacos
- * Versión: 3 - + peso_neto, + fecha con año, + validacion_px, + lookup BD para px_esperado
- * ultima_actualizacion: 2026-06-17
+ * Versión: 4 - P+X migrado a rango p_x_min/p_x_max (antes p_x_d_l_m_x/p_x_j/p_x_v)
+ * ultima_actualizacion: 2026-07-22
  * Snapshot desde n8n. NO editar aquí — la fuente de verdad es n8n.
  * Sincronizar tras cualquier cambio en el workflow.
  *
+ * v4 — P+X ya no depende del día de la semana. Se valida como rango
+ *   tolerado [p_x_min, p_x_max] leído directamente del producto en BD.
+ *   Las columnas viejas (p_x_d_l_m_x, p_x_j, p_x_v) siguen en BD pero
+ *   el código ya no las lee.
+ *
  * Solo extrae: producto, peso, fecha caducidad, lote, P+X.
- * Hace lookup en BD (via nodo "Get productos tacos") para el px_esperado
- * según cliente + día de la semana. La identificación del cliente/producto
- * viene de la fase tarrina previa, no de este workflow.
+ * Hace lookup en BD (via nodo "Get productos tacos") para el rango
+ * p_x_min/p_x_max. La identificación del cliente/producto viene de la
+ * fase tarrina previa, no de este workflow.
  */
 
 let iaFalloTotalmente = false;
@@ -118,7 +123,7 @@ function parseISO(s) {
   return new Date(p[0], p[1] - 1, p[2]);
 }
 
-let validacion_px = { px_leido: 0, px_esperado: 0, dia_semana_nombre: '', resultado: 'No calculado' };
+let validacion_px = { px_leido: 0, px_min: 0, px_max: 0, dia_semana_nombre: '', resultado: 'No calculado' };
 const diasSemana = ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"];
 
 // Lookup BD: producto TACOS activo del cliente. Si hay varios (240g, 400g…)
@@ -146,19 +151,14 @@ if (dCad && dProd) {
   validacion_px.dia_semana_nombre = diasSemana[diaSemana];
 
   if (productoTacos) {
-    // p_x_d_l_m_x cubre L/M/X/S, p_x_j para jueves, p_x_v para viernes
-    if (diaSemana === 4) {
-      validacion_px.px_esperado = Number(productoTacos.p_x_j) || 0;
-    } else if (diaSemana === 5) {
-      validacion_px.px_esperado = Number(productoTacos.p_x_v) || Number(productoTacos.p_x_d_l_m_x) || 0;
-    } else {
-      validacion_px.px_esperado = Number(productoTacos.p_x_d_l_m_x) || 0;
-    }
+    validacion_px.px_min = Number(productoTacos.p_x_min) || 0;
+    validacion_px.px_max = Number(productoTacos.p_x_max) || 0;
 
-    if (validacion_px.px_leido === validacion_px.px_esperado) {
+    const pxDentroDeRango = validacion_px.px_leido >= validacion_px.px_min && validacion_px.px_leido <= validacion_px.px_max;
+    if (pxDentroDeRango) {
       validacion_px.resultado = 'OK';
     } else {
-      validacion_px.resultado = `KO (esperado ${validacion_px.px_esperado}, leído ${validacion_px.px_leido})`;
+      validacion_px.resultado = `KO (debe estar entre ${validacion_px.px_min} y ${validacion_px.px_max}, leído ${validacion_px.px_leido})`;
     }
   } else {
     validacion_px.resultado = 'OK (sin lookup BD)';

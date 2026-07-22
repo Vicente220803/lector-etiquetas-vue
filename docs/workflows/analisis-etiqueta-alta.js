@@ -1,12 +1,19 @@
 /**
  * NODO: Code JavaScript - ANALISIS ETIQUETA ALTA CLIENTE NUEVO
- * Versión: 1.7
- * ultima_actualizacion: 2026-07-21
+ * Versión: 1.8
+ * ultima_actualizacion: 2026-07-22
  *
  * NOTA arquitectónica: el análisis de la etiqueta de CAJA (Capa 2) se hace
  * en un webhook SEPARADO dentro del mismo workflow: analisis-etiqueta-alta-CAJA.
  * Ver docs/workflows/analisis-etiqueta-alta-CAJA.js para el Code node de
  * ese webhook.
+ *
+ * v1.8 — Normalización defensiva prefijo 4335619 (LIDL Chef Select TACOS):
+ *   - Estos productos son SIEMPRE EAN-13 fijo. Se elimina el falso positivo
+ *     de la IA que a veces los clasifica como variable_peso_9_3_1 por
+ *     coincidencia casual de dígitos del peso dentro del EAN.
+ *   - Requiere prompt v1.5 con aclaración: NO leer nombre del FABRICANTE
+ *     (ribete perimetral, ej. "SUREXPORT LEVANTE S.L.U.") como marca_logo.
  *
  * v1.7 — LIDL Chef Select TACOS pasa a heurística cubierta:
  *   - Ya existe el workflow productivo 'verifica-etiqueta-tacos-lidl' en n8n
@@ -176,6 +183,16 @@ if (
    /^1\s+\d{3}$/.test(String(detectado.lote_ejemplo || "").trim()))
 ) {
   detectado.lote_formato = "3 dígitos";
+}
+
+// Normalización defensiva (v1.8): LIDL Chef Select TACOS (prefijo EAN 4335619)
+// son SIEMPRE EAN-13 fijo. La IA a veces se equivoca al aplicar el método
+// de comprobación cruzada peso↔EAN (los dígitos del peso 230 pueden aparecer
+// por casualidad dentro del EAN 4335619XXXXXX y dispararse falso positivo
+// "variable_peso_9_3_1"). Forzamos fijo_13 para este grupo.
+const prefijoDetPrelim = String(detectado.ean_prefijo_7dig || "").trim();
+if (prefijoDetPrelim === "4335619") {
+  detectado.tipo_ean = "fijo_13";
 }
 
 // ============================================================

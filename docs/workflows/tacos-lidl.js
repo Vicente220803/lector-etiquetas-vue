@@ -1,7 +1,23 @@
 /**
  * NODO: Code JavaScript - VERIFICA ETIQUETA TACOS LIDL
- * Versión: 1.0
- * ultima_actualizacion: 2026-07-21
+ * Versión: 1.3
+ * ultima_actualizacion: 2026-07-22
+ *
+ * v1.3 — Fix BUG real: App.vue no mostraba Producto ni EAN en pantalla
+ *   ("¡COINCIDE!"). Causa: App.vue lee `producto_db` y `ean`/`ean_bd`
+ *   (los nombres que usan pina.js/coco.js), pero este workflow solo
+ *   mandaba `producto_bd` y `ean_leido` — nombres distintos, campos
+ *   vacíos en pantalla. Fix: se añaden `producto_db`, `ean` y `ean_bd`
+ *   como alias en TODAS las respuestas (éxito y error), manteniendo los
+ *   nombres originales por si algo más los usa.
+ *
+ * v1.2 — P+X migrado a rango p_x_min/p_x_max (antes p_x_d_l_m_x/p_x_j/p_x_v
+ *   por día de la semana). Los 5 SKUs ya tienen el rango relleno en BD
+ *   (coco: 8-10, resto: 6-8).
+ *
+ * v1.1 — Validación pictograma "No apto 0-3 años" (riesgo asfixia),
+ *   obligatorio SOLO en el SKU Coco (id=74). Requiere prompt v1.6 con
+ *   campo pictograma_no_apto_0_3.
  *
  * Snapshot desde n8n. NO editar aquí — la fuente de verdad es n8n.
  * Sincronizar tras cualquier cambio en el workflow.
@@ -145,6 +161,7 @@ if (!producto_bd) {
       error_sanitario: true,
       cliente: "LIDL SUPERMERCADOS, S.A.U",
       ean_leido: eanCompleto,
+      ean: eanCompleto,
       mensaje_error: `EAN completo ${eanCompleto} NO encontrado en la BD de productos. Verifica el maestro de productos o contacta con el equipo técnico.`
     }
   }];
@@ -160,7 +177,10 @@ if (producto_hint && producto_hint.length > 0) {
         error_sanitario: true,
         cliente: "LIDL SUPERMERCADOS, S.A.U",
         ean_leido: eanCompleto,
+        ean: eanCompleto,
+        ean_bd: producto_bd.ean,
         producto_bd: producto_bd.nombre_sap,
+        producto_db: producto_bd.nombre_sap,
         producto_esperado: producto_hint,
         mensaje_error: `EAN escaneado corresponde a "${producto_bd.nombre_sap}" pero la orden esperaba "${producto_hint}". Etiqueta EQUIVOCADA — no continuar.`
       }
@@ -178,8 +198,34 @@ if (detectado.logo_reciclaje_amarillo === false || detectado.logo_reciclaje_amar
       error_sanitario: true,
       cliente: "LIDL SUPERMERCADOS, S.A.U",
       producto_bd: producto_bd.nombre_sap,
+      producto_db: producto_bd.nombre_sap,
       ean_leido: eanCompleto,
+      ean: eanCompleto,
+      ean_bd: producto_bd.ean,
       mensaje_error: `El producto LIDL Chef Select TACOS "${producto_bd.nombre_sap}" DEBE llevar el logo amarillo "RECICLA Al Amarillo" en la etiqueta, pero NO se detectó. Verifica visualmente y NO continúes si falta.`
+    }
+  }];
+}
+
+// ============================================================
+// 5b. VALIDACIÓN PICTOGRAMA NO APTO 0-3 AÑOS (obligatorio solo Coco)
+// ============================================================
+// Riesgo de asfixia por trozos duros de coco — solo esta variante lo lleva
+// de las 5 (piña, coco, melón, sandía, mix). Requiere prompt v1.6 con el
+// campo pictograma_no_apto_0_3.
+const esCoco = /COCO/i.test(producto_bd.nombre_sap);
+if (esCoco && (detectado.pictograma_no_apto_0_3 === false || detectado.pictograma_no_apto_0_3 === null || detectado.pictograma_no_apto_0_3 === undefined)) {
+  return [{
+    json: {
+      resultado_v: "ERROR",
+      error_sanitario: true,
+      cliente: "LIDL SUPERMERCADOS, S.A.U",
+      producto_bd: producto_bd.nombre_sap,
+      producto_db: producto_bd.nombre_sap,
+      ean_leido: eanCompleto,
+      ean: eanCompleto,
+      ean_bd: producto_bd.ean,
+      mensaje_error: `El producto "${producto_bd.nombre_sap}" DEBE llevar el pictograma "No apto para menores de 3 años" (riesgo de asfixia) en la etiqueta, pero NO se detectó. Verifica visualmente y NO continúes si falta.`
     }
   }];
 }
@@ -238,7 +284,10 @@ if (esMix) {
         error_sanitario: true,
         cliente: "LIDL SUPERMERCADOS, S.A.U",
         producto_bd: producto_bd.nombre_sap,
+        producto_db: producto_bd.nombre_sap,
         ean_leido: eanCompleto,
+        ean: eanCompleto,
+        ean_bd: producto_bd.ean,
         mensaje_error: `Validación info nutricional del Mix FALLIDA (${erroresNutricional.length} error/es): ` +
           erroresNutricional.join(" | ") +
           ` — Posible impresión defectuosa. Verifica visualmente la etiqueta antes de continuar.`
@@ -273,7 +322,10 @@ if (!fechaCaducidad) {
       error_sanitario: true,
       cliente: "LIDL SUPERMERCADOS, S.A.U",
       producto_bd: producto_bd.nombre_sap,
+      producto_db: producto_bd.nombre_sap,
       ean_leido: eanCompleto,
+      ean: eanCompleto,
+      ean_bd: producto_bd.ean,
       mensaje_error: `Fecha de caducidad "${detectado.fecha_caducidad}" NO se pudo interpretar. Formato esperado: DD/MM.`
     }
   }];
@@ -295,18 +347,10 @@ if (fecha_produccion_str) {
 const MS_DIA = 1000 * 60 * 60 * 24;
 const px_leido = Math.round((fechaCaducidad - fechaReferencia) / MS_DIA);
 
-// P+X esperado según día de la semana de la fecha de referencia (BD)
-const diaSemana = fechaReferencia.getDay(); // 0=domingo, 1=lunes...
-let px_esperado;
-if (diaSemana === 4) {
-  px_esperado = producto_bd.p_x_j || producto_bd.p_x_d_l_m_x;
-} else if (diaSemana === 5) {
-  px_esperado = producto_bd.p_x_v || producto_bd.p_x_d_l_m_x;
-} else {
-  px_esperado = producto_bd.p_x_d_l_m_x;
-}
-
-const px_ok = Number(px_leido) === Number(px_esperado);
+// P+X esperado: rango tolerado [p_x_min, p_x_max] del producto en BD.
+const px_min = Number(producto_bd.p_x_min);
+const px_max = Number(producto_bd.p_x_max);
+const px_ok = Number(px_leido) >= px_min && Number(px_leido) <= px_max;
 
 // ============================================================
 // 8. LOTE (informativo, no bloqueante)
@@ -321,8 +365,11 @@ return [{
     resultado_v: px_ok ? "OK" : "DIFIERE_PX",
     cliente: "LIDL SUPERMERCADOS, S.A.U",
     producto_bd: producto_bd.nombre_sap,
+    producto_db: producto_bd.nombre_sap,
     producto_id: producto_bd.id,
     ean_leido: eanCompleto,
+    ean: eanCompleto,
+    ean_bd: producto_bd.ean,
     fecha_caducidad: detectado.fecha_caducidad,
     fecha_caducidad_iso: fechaCaducidad.toISOString().slice(0, 10),
     fecha_referencia_iso: fechaReferencia.toISOString().slice(0, 10),
@@ -331,14 +378,16 @@ return [{
     origen: detectado.origen || null,
     producto_texto: detectado.producto_texto || null,
     logo_reciclaje_amarillo: true,
+    pictograma_no_apto_0_3: esCoco ? true : (detectado.pictograma_no_apto_0_3 ?? null),
     info_nutricional: detectado.info_nutricional || null,
     info_nutricional_ok: esMix ? true : "N/A",
     px_leido: px_leido,
-    px_esperado: px_esperado,
+    px_min: px_min,
+    px_max: px_max,
     px_ok: px_ok,
     calidad_foto: detectado.calidad_foto || "buena",
     mensaje: px_ok
-      ? `Etiqueta OK. Producto: ${producto_bd.nombre_sap}. P+X: ${px_leido} días (esperado ${px_esperado}).`
-      : `P+X detectado (${px_leido}) NO coincide con esperado (${px_esperado}). Verifica fecha de caducidad y fecha de producción.`
+      ? `Etiqueta OK. Producto: ${producto_bd.nombre_sap}. P+X: ${px_leido} días (rango esperado ${px_min}-${px_max}).`
+      : `P+X detectado (${px_leido}) fuera del rango esperado (${px_min}-${px_max}). Verifica fecha de caducidad y fecha de producción.`
   }
 }];
