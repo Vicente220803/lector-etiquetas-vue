@@ -1,7 +1,12 @@
 /**
  * NODO: Code JavaScript - VERIFICA ETIQUETA TACOS LIDL
- * Versión: 1.3
+ * Versión: 1.4
  * ultima_actualizacion: 2026-07-22
+ *
+ * v1.4 — Añadido campo `fecha_envasado` en la respuesta final. La etiqueta
+ *   NO imprime fecha de envasado (solo caducidad DD/MM), pero se muestra
+ *   la fecha_produccion de la orden (ya usada internamente para el P+X)
+ *   para dar trazabilidad en la app del compa, que antes mostraba "—".
  *
  * v1.3 — Fix BUG real: App.vue no mostraba Producto ni EAN en pantalla
  *   ("¡COINCIDE!"). Causa: App.vue lee `producto_db` y `ean`/`ean_bd`
@@ -372,6 +377,10 @@ return [{
     ean_bd: producto_bd.ean,
     fecha_caducidad: detectado.fecha_caducidad,
     fecha_caducidad_iso: fechaCaducidad.toISOString().slice(0, 10),
+    // La etiqueta NO imprime fecha de envasado (solo caducidad DD/MM).
+    // Mostramos la fecha_produccion de la orden (o "hoy" si no llegó) para
+    // que quede trazabilidad de qué fecha se usó como referencia del P+X.
+    fecha_envasado: `${String(fechaReferencia.getDate()).padStart(2, '0')}/${String(fechaReferencia.getMonth() + 1).padStart(2, '0')}/${fechaReferencia.getFullYear()}`,
     fecha_referencia_iso: fechaReferencia.toISOString().slice(0, 10),
     lote: lote,
     peso_neto: detectado.peso_neto || null,
