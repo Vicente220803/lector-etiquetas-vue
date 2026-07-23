@@ -2166,6 +2166,27 @@ const compararBoteConOrden = (data) => {
       }
     }
 
+    // Barrera adicional, independiente de lo que pida la orden del padre:
+    // el rango p_x_min/p_x_max del producto en BD es la autoridad de
+    // seguridad alimentaria. Si el P+X calculado se sale de ese rango,
+    // bloqueamos SIEMPRE — aunque coincida con verifyParams.px (el P+X
+    // que la orden del padre esperaba). Cubre el caso donde el cálculo de
+    // la orden y el rango del producto en BD discrepan (p. ej. Sandía con
+    // rango 6-8 pero la orden esperando P+4).
+    const pxMinBd = data.px_min ?? data.validacion_px?.px_min ?? null
+    const pxMaxBd = data.px_max ?? data.validacion_px?.px_max ?? null
+    const pxLeidoParaRango = Number(data.validacion_px?.px_leido ?? data.px_leido)
+    // pxMinBd/pxMaxBd llegan como 0 (no null) cuando el producto en BD no
+    // tiene p_x_min/p_x_max rellenado (Number(null) === 0 en n8n) — eso NO
+    // es un rango real de 0 días, es "sin datos". Exigimos > 0 para no
+    // bloquear por error productos a los que aún no se les ha rellenado el
+    // rango en Supabase.
+    if (pxMinBd > 0 && pxMaxBd > 0 && !isNaN(pxLeidoParaRango) && !esTarrina) {
+      if (pxLeidoParaRango < pxMinBd || pxLeidoParaRango > pxMaxBd) {
+        errores.push(`⚠️ P+X (${pxLeidoParaRango}) fuera del rango permitido del producto (P+${pxMinBd} a P+${pxMaxBd}). El producto NO admite este P+X, aunque coincida con lo esperado por la orden.`)
+      }
+    }
+
     // GUFRESCO: el lote en la etiqueta debe ser el día juliano de la fecha de
     // producción de la orden (hoy en flujo normal; la fecha de la orden en
     // modo "verificar etiqueta otro día").
