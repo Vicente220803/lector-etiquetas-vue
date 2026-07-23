@@ -2045,7 +2045,14 @@ const compararBoteConOrden = (data) => {
     return
   }
 
-  if (data.bloqueo_ia || data.cliente === 'REINTENTAR') {
+  // data.resultado_v === 'ERROR' es el formato de bloqueo de tacos-lidl.js
+  // (bote equivocado, falta logo/pictograma, nutricional Mix mal, etc.) —
+  // usa cliente:"LIDL SUPERMERCADOS..." en vez de cliente:"REINTENTAR", así
+  // que sin este check NUNCA se reconocía como bloqueante y se colaba como
+  // ¡COINCIDE! aunque n8n hubiera detectado el error correctamente. Seguro
+  // de añadir: pina.js/coco.js solo usan resultado_v="FALLO IA" (que ya
+  // bloquea vía cliente==='REINTENTAR'), nunca "ERROR".
+  if (data.bloqueo_ia || data.cliente === 'REINTENTAR' || data.resultado_v === 'ERROR') {
     errores.push(data.mensaje_error || 'La IA no pudo procesar la imagen. Vuelve a hacer la foto.')
   } else {
     // Comparar cliente FLEXIBLE (uno contiene al otro) — acepta también cliente_alias
