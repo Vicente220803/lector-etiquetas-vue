@@ -1,7 +1,12 @@
 /**
  * NODO: Code JavaScript - VERIFICA ETIQUETA TACOS LIDL
- * Versión: 1.6
+ * Versión: 1.7
  * ultima_actualizacion: 2026-07-23
+ *
+ * v1.7 — Fix BUG real: lote perdía el "1" fijo. La IA a veces devolvía
+ *   solo los 3 dígitos del día juliano ("202") en vez del formato completo
+ *   ("1 202"). Reconstrucción defensiva en el código (no depende de que
+ *   la IA acierte) + refuerzo en el prompt v1.7 (regla 6).
  *
  * v1.6 — Fix BUG real: chequeo de calidad_foto defensivo. Antes solo se
  *   confiaba en que la IA dijera calidad_foto="mala"; si decía "buena"
@@ -409,7 +414,15 @@ const px_ok = Number(px_leido) >= px_min && Number(px_leido) <= px_max;
 // ============================================================
 // 8. LOTE (informativo, no bloqueante)
 // ============================================================
-const lote = detectado.lote_ejemplo || null;
+// Formato SIEMPRE "1 XXX" (1 fijo + 3 dígitos julianos) para este grupo.
+// La IA a veces omite el "1" fijo y solo devuelve los 3 dígitos del día
+// juliano (ej. "202" en vez de "1 202"). Reconstrucción defensiva: si el
+// valor son solo 3 dígitos, lo completamos con el "1 " fijo — no depende
+// de que la IA acierte a leerlo completo.
+let lote = detectado.lote_ejemplo || null;
+if (lote && /^\d{3}$/.test(String(lote).trim())) {
+  lote = `1 ${String(lote).trim()}`;
+}
 
 // ============================================================
 // 9. RESPUESTA FINAL

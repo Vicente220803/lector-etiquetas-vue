@@ -2,6 +2,11 @@
 
 Este prompt se usa con OpenAI gpt-4o-mini (o modelo compatible con visión). Devuelve JSON estricto que el Code node parsea directamente.
 
+### Versión 1.7 — 2026-07-23
+
+Refinado:
+- Regla 6 (LOTE): añadido formato explícito "1 XXX" (LIDL Chef Select TACOS). La IA a veces omitía el "1" fijo y devolvía solo los 3 dígitos del día juliano. Instrucción explícita de incluir el "1" siempre.
+
 ### Versión 1.6 — 2026-07-22
 
 Añadido:
@@ -92,6 +97,7 @@ REGLAS DE OBSERVACIÓN:
 6. LOTE:
    - Formato "6 dígitos" agrupado (ej. "002 180 1544 00" — se lee 6 dig significativos: día_juliano + secuencia).
    - Formato "3 dígitos" solo (ej. "154" — típico GUFRESCO/ANTICH, día juliano).
+   - Formato "1 XXX" (ej. "1 202" — típico LIDL Chef Select TACOS: un "1" fijo SEPARADO por espacio, seguido de 3 dígitos de día juliano). IMPORTANTE: incluye SIEMPRE el "1" fijo en `lote_ejemplo`, tal cual aparece — NO omitas el "1" aunque parezca redundante o un número de línea. Si ves "1 202", el ejemplo es "1 202", NO "202".
    - Formato "otros" si es distinto.
    Ejemplo tal cual aparece.
 
