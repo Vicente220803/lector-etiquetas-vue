@@ -1,7 +1,13 @@
 /**
  * NODO: Code JavaScript - VERIFICA ETIQUETA TACOS LIDL
- * Versión: 1.8
+ * Versión: 1.9
  * ultima_actualizacion: 2026-07-23
+ *
+ * v1.9 — Aviso no bloqueante `ean_no_legible_advertencia` cuando el
+ *   producto se identificó por la orden (EAN ilegible en foto, v1.8).
+ *   App.vue lo muestra como aviso ámbar en la pantalla ¡COINCIDE! para
+ *   que el operario sepa que debe fijarse bien al escanear con la
+ *   pistola — no bloquea, solo avisa.
  *
  * v1.8 — EAN ilegible en la foto ya NO bloquea si tenemos producto_hint
  *   (la orden dice qué SKU es). Antes cualquier foto con el código de
@@ -201,6 +207,7 @@ if (detectado.calidad_foto === "mala") {
 const productosDB = $('Get many rows').all().map(it => it.json);
 const eanCompleto = String(detectado.ean_completo || "").replace(/\s/g, "");
 let producto_bd = null;
+let identificadoPorOrden = false; // true si se usó el camino fallback (EAN ilegible en foto)
 
 if (!eanNoLegible) {
   const eanPrefijo = eanCompleto.substring(0, 7);
@@ -285,6 +292,8 @@ if (!eanNoLegible) {
       }
     }];
   }
+
+  identificadoPorOrden = true;
 }
 
 // ============================================================
@@ -515,8 +524,13 @@ return [{
     px_max: px_max,
     px_ok: px_ok,
     calidad_foto: detectado.calidad_foto || "buena",
-    mensaje: px_ok
+    // Aviso no bloqueante: el producto se identificó por la orden porque el
+    // EAN no se leyó con claridad en la foto (ver sección 3-4). El operario
+    // debe fijarse bien al escanear con la pistola — es la confirmación real.
+    ean_no_legible_advertencia: identificadoPorOrden,
+    mensaje: (px_ok
       ? `Etiqueta OK. Producto: ${producto_bd.nombre_sap}. P+X: ${px_leido} días (rango esperado ${px_min}-${px_max}).`
-      : `P+X detectado (${px_leido}) fuera del rango esperado (${px_min}-${px_max}). Verifica fecha de caducidad y fecha de producción.`
+      : `P+X detectado (${px_leido}) fuera del rango esperado (${px_min}-${px_max}). Verifica fecha de caducidad y fecha de producción.`)
+      + (identificadoPorOrden ? ' ⚠️ El EAN no se leyó con claridad en la foto — verifica bien al escanear con la pistola.' : '')
   }
 }];

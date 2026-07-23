@@ -48,6 +48,9 @@
             <div><b>EAN:</b> {{ eanMostrado }}</div>
             <div v-if="verifyParams?.fase !== 'tarrina'"><b>P+X:</b> {{ verifyResult.datos.validacion_px?.px_leido }}</div>
           </div>
+          <p v-if="verifyResult.datos.ean_no_legible_advertencia" class="verify-warning-msg">
+            ⚠️ El EAN no se leyó con claridad en la foto — se identificó el producto por la orden. Verifica bien al escanear.
+          </p>
           <input
             ref="eanInputRef"
             v-model="eanEscaneado"
@@ -2740,6 +2743,17 @@ const showError = (message) => {
   color: #c53030;
   font-size: 14px;
   font-weight: 600;
+}
+.verify-warning-msg {
+  margin-top: 8px;
+  padding: 8px 12px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
 }
 @keyframes pulseGreen {
   0%, 100% { box-shadow: 0 0 0 0 rgba(56, 161, 105, 0.4); }
