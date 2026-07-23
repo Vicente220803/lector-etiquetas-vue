@@ -2183,7 +2183,10 @@ const compararBoteConOrden = (data) => {
     // rango en Supabase.
     if (pxMinBd > 0 && pxMaxBd > 0 && !isNaN(pxLeidoParaRango) && !esTarrina) {
       if (pxLeidoParaRango < pxMinBd || pxLeidoParaRango > pxMaxBd) {
-        errores.push(`⚠️ P+X (${pxLeidoParaRango}) fuera del rango permitido del producto (P+${pxMinBd} a P+${pxMaxBd}). El producto NO admite este P+X, aunque coincida con lo esperado por la orden.`)
+        errores.push(`⚠️ P+X (${pxLeidoParaRango}) fuera del rango permitido del producto (P+${pxMinBd} a P+${pxMaxBd}). ` +
+          `Etiqueta y orden coinciden entre sí, pero ese P+X no está permitido para este producto. Dos causas posibles: ` +
+          `(1) la fecha de caducidad puesta en la Hoja de Fabricación es incorrecta, o ` +
+          `(2) la etiqueta se ha impreso con un P+X no permitido para este tipo de orden. Verifica ambas antes de continuar.`)
       }
     }
 
