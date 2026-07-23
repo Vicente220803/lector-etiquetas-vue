@@ -1,7 +1,17 @@
 /**
  * NODO: Code JavaScript - VERIFICA ETIQUETA TACOS LIDL
- * Versión: 1.7
+ * Versión: 1.8
  * ultima_actualizacion: 2026-07-23
+ *
+ * v1.8 — EAN ilegible en la foto ya NO bloquea si tenemos producto_hint
+ *   (la orden dice qué SKU es). Antes cualquier foto con el código de
+ *   barras borroso forzaba REINTENTAR, aunque el resto de la etiqueta
+ *   (fecha, lote, logo, pictograma) se leyera perfectamente. Ahora, si
+ *   solo el EAN falla, identificamos el producto por la orden y dejamos
+ *   que el escaneo físico con la pistola (más fiable que la foto para
+ *   ese dato) confirme el EAN real al final del flujo — si no coincide,
+ *   se bloqueará ahí. Fecha de caducidad y lote SIGUEN siendo
+ *   obligatorios en la foto (no hay otra forma de confirmarlos).
  *
  * v1.7 — Fix BUG real: lote perdía el "1" fijo. La IA a veces devolvía
  *   solo los 3 dígitos del día juliano ("202") en vez del formato completo
@@ -146,12 +156,22 @@ try {
 // antes caía en el mensaje confuso de "prefijo no corresponde" (sección 3)
 // en vez de pedir repetir la foto. Chequeo defensivo por campos críticos
 // vacíos, igual que en analisis-etiqueta-alta.js.
+//
+// EXCEPCIÓN EAN (v1.8): si el EAN no se lee bien en la foto PERO tenemos
+// producto_hint (la orden nos dice qué SKU es), NO bloqueamos aquí — el
+// escaneo físico con la pistola (paso posterior, más fiable que la foto
+// para leer un barcode pequeño) confirmará el EAN real. Fecha de
+// caducidad y lote SIGUEN siendo obligatorios en la foto: no hay otra
+// forma de confirmarlos más adelante.
 const eanNoLegible = !detectado.ean_completo ||
                      String(detectado.ean_completo).toLowerCase().includes("no_legible");
 const fechaCaducidadVacia = !detectado.fecha_caducidad;
 const loteNoDetectado = !detectado.lote_ejemplo;
+const hayProductoHint = producto_hint && producto_hint.length > 0;
 
-if (eanNoLegible || fechaCaducidadVacia || loteNoDetectado) {
+const eanIlegibleBloquea = eanNoLegible && !hayProductoHint;
+
+if (eanIlegibleBloquea || fechaCaducidadVacia || loteNoDetectado) {
   detectado.calidad_foto = "mala";
 }
 
@@ -171,47 +191,36 @@ if (detectado.calidad_foto === "mala") {
 }
 
 // ============================================================
-// 3. IDENTIFICACIÓN POR PREFIJO EAN
+// 3-4. IDENTIFICACIÓN DEL PRODUCTO
 // ============================================================
-const eanCompleto = String(detectado.ean_completo || "").replace(/\s/g, "");
-const eanPrefijo = eanCompleto.substring(0, 7);
-
-if (eanPrefijo !== "4335619") {
-  return [{
-    json: {
-      resultado_v: "ERROR",
-      error_sanitario: true,
-      cliente: "ERROR",
-      mensaje_error: `Etiqueta con prefijo EAN "${eanPrefijo}" NO corresponde a LIDL Chef Select TACOS (prefijo esperado: 4335619). Verifica que el producto es correcto.`
-    }
-  }];
-}
-
-// ============================================================
-// 4. CROSS-CHECK CON BD - identificar SKU exacto
-// ============================================================
+// Camino normal: por el EAN leído en la foto (prefijo + cross-check BD).
+// Camino fallback (v1.8, EAN ilegible en foto): por el producto que dice
+// la orden (producto_hint). El escaneo físico con la pistola es quien
+// confirma el EAN real al final del flujo (más fiable que la foto para
+// ese dato concreto) — si no coincide con el de BD, se bloqueará ahí.
 const productosDB = $('Get many rows').all().map(it => it.json);
-const producto_bd = productosDB.find(p =>
-  String(p.ean || "").replace(/\s/g, "").trim() === eanCompleto
-);
+const eanCompleto = String(detectado.ean_completo || "").replace(/\s/g, "");
+let producto_bd = null;
 
-if (!producto_bd) {
-  return [{
-    json: {
-      resultado_v: "ERROR",
-      error_sanitario: true,
-      cliente: "LIDL SUPERMERCADOS, S.A.U",
-      ean_leido: eanCompleto,
-      ean: eanCompleto,
-      mensaje_error: `EAN completo ${eanCompleto} NO encontrado en la BD de productos. Verifica el maestro de productos o contacta con el equipo técnico.`
-    }
-  }];
-}
+if (!eanNoLegible) {
+  const eanPrefijo = eanCompleto.substring(0, 7);
 
-// Barrera: producto_hint (del padre) vs producto_bd (por EAN)
-if (producto_hint && producto_hint.length > 0) {
-  const nombreSapBd = String(producto_bd.nombre_sap || "").toUpperCase();
-  if (!nombreSapBd.includes(producto_hint) && !producto_hint.includes(nombreSapBd)) {
+  if (eanPrefijo !== "4335619") {
+    return [{
+      json: {
+        resultado_v: "ERROR",
+        error_sanitario: true,
+        cliente: "ERROR",
+        mensaje_error: `Etiqueta con prefijo EAN "${eanPrefijo}" NO corresponde a LIDL Chef Select TACOS (prefijo esperado: 4335619). Verifica que el producto es correcto.`
+      }
+    }];
+  }
+
+  producto_bd = productosDB.find(p =>
+    String(p.ean || "").replace(/\s/g, "").trim() === eanCompleto
+  );
+
+  if (!producto_bd) {
     return [{
       json: {
         resultado_v: "ERROR",
@@ -219,11 +228,60 @@ if (producto_hint && producto_hint.length > 0) {
         cliente: "LIDL SUPERMERCADOS, S.A.U",
         ean_leido: eanCompleto,
         ean: eanCompleto,
-        ean_bd: producto_bd.ean,
-        producto_bd: producto_bd.nombre_sap,
-        producto_db: producto_bd.nombre_sap,
+        mensaje_error: `EAN completo ${eanCompleto} NO encontrado en la BD de productos. Verifica el maestro de productos o contacta con el equipo técnico.`
+      }
+    }];
+  }
+
+  // Barrera: producto_hint (del padre) vs producto_bd (por EAN)
+  if (hayProductoHint) {
+    const nombreSapBd = String(producto_bd.nombre_sap || "").toUpperCase();
+    if (!nombreSapBd.includes(producto_hint) && !producto_hint.includes(nombreSapBd)) {
+      return [{
+        json: {
+          resultado_v: "ERROR",
+          error_sanitario: true,
+          cliente: "LIDL SUPERMERCADOS, S.A.U",
+          ean_leido: eanCompleto,
+          ean: eanCompleto,
+          ean_bd: producto_bd.ean,
+          producto_bd: producto_bd.nombre_sap,
+          producto_db: producto_bd.nombre_sap,
+          producto_esperado: producto_hint,
+          mensaje_error: `EAN escaneado corresponde a "${producto_bd.nombre_sap}" pero la orden esperaba "${producto_hint}". Etiqueta EQUIVOCADA — no continuar.`
+        }
+      }];
+    }
+  }
+} else {
+  // EAN ilegible en la foto: identificamos por lo que dice la orden.
+  if (!hayProductoHint) {
+    return [{
+      json: {
+        resultado_v: "ERROR",
+        error_sanitario: true,
+        cliente: "ERROR",
+        mensaje_error: "El EAN no se pudo leer en la foto y la orden no indica qué producto es. " +
+          "No se puede identificar el producto. Repite la foto asegurando que el código de barras sea legible."
+      }
+    }];
+  }
+
+  producto_bd = productosDB.find(p => {
+    const cliente = String(p.cliente || "").toUpperCase();
+    if (cliente !== "LIDL SUPERMERCADOS, S.A.U") return false;
+    const nombreSapBd = String(p.nombre_sap || "").toUpperCase();
+    return nombreSapBd.includes(producto_hint) || producto_hint.includes(nombreSapBd);
+  });
+
+  if (!producto_bd) {
+    return [{
+      json: {
+        resultado_v: "ERROR",
+        error_sanitario: true,
+        cliente: "ERROR",
         producto_esperado: producto_hint,
-        mensaje_error: `EAN escaneado corresponde a "${producto_bd.nombre_sap}" pero la orden esperaba "${producto_hint}". Etiqueta EQUIVOCADA — no continuar.`
+        mensaje_error: `El EAN no se pudo leer en la foto y no se encontró en BD ningún producto LIDL Chef Select TACOS que coincida con "${producto_hint}" (lo que indica la orden). Verifica el maestro de productos.`
       }
     }];
   }
