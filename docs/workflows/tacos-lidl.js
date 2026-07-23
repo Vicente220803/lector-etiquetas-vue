@@ -1,7 +1,14 @@
 /**
  * NODO: Code JavaScript - VERIFICA ETIQUETA TACOS LIDL
- * Versión: 1.5
- * ultima_actualizacion: 2026-07-22
+ * Versión: 1.6
+ * ultima_actualizacion: 2026-07-23
+ *
+ * v1.6 — Fix BUG real: chequeo de calidad_foto defensivo. Antes solo se
+ *   confiaba en que la IA dijera calidad_foto="mala"; si decía "buena"
+ *   pero devolvía ean_completo="no_legible", caía en el mensaje confuso
+ *   "prefijo EAN no corresponde" (sección 3) en vez de pedir repetir la
+ *   foto. Ahora se fuerza calidad_foto="mala" si EAN/fecha_caducidad/lote
+ *   vienen vacíos, igual que ya hacía analisis-etiqueta-alta.js.
  *
  * v1.5 — Validación cruzada del pictograma "No apto 0-3 años": ahora
  *   también bloquea si aparece en piña/melón/sandía/mix (donde NO debería
@@ -129,12 +136,30 @@ try {
 // ============================================================
 // 2. CHEQUEO CALIDAD FOTO
 // ============================================================
+// No nos fiamos ciegamente de la auto-evaluación de la IA (calidad_foto):
+// a veces dice "buena" mientras devuelve ean_completo="no_legible", y eso
+// antes caía en el mensaje confuso de "prefijo no corresponde" (sección 3)
+// en vez de pedir repetir la foto. Chequeo defensivo por campos críticos
+// vacíos, igual que en analisis-etiqueta-alta.js.
+const eanNoLegible = !detectado.ean_completo ||
+                     String(detectado.ean_completo).toLowerCase().includes("no_legible");
+const fechaCaducidadVacia = !detectado.fecha_caducidad;
+const loteNoDetectado = !detectado.lote_ejemplo;
+
+if (eanNoLegible || fechaCaducidadVacia || loteNoDetectado) {
+  detectado.calidad_foto = "mala";
+}
+
 if (detectado.calidad_foto === "mala") {
   return [{
     json: {
       resultado_v: "REINTENTAR",
       cliente: "REINTENTAR",
-      mensaje_error: "Foto de baja calidad. Por favor, repite con mejor luz, enfoque y encuadre.",
+      mensaje_error: "La foto es de baja calidad y no se pueden leer los datos con fiabilidad " +
+        "(EAN, fecha de caducidad o lote ilegibles). Por favor, repite la foto asegurando: " +
+        "(1) buena iluminación (evitar sombras y reflejos); " +
+        "(2) enfoque nítido; " +
+        "(3) etiqueta completa en el encuadre, no cortada.",
       calidad_foto: "mala"
     }
   }];
