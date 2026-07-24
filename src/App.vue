@@ -2052,8 +2052,16 @@ const compararBoteConOrden = (data) => {
   // ¡COINCIDE! aunque n8n hubiera detectado el error correctamente. Seguro
   // de añadir: pina.js/coco.js solo usan resultado_v="FALLO IA" (que ya
   // bloquea vía cliente==='REINTENTAR'), nunca "ERROR".
-  if (data.bloqueo_ia || data.cliente === 'REINTENTAR' || data.resultado_v === 'ERROR') {
-    errores.push(data.mensaje_error || 'La IA no pudo procesar la imagen. Vuelve a hacer la foto.')
+  //
+  // data.error_sanitario === true es el formato de bloqueo de pina.js/coco.js
+  // para EAN NO LEÍDO (auto-mode), CÓDIGO R NO LEÍDO (MERCADONA), IMPORTE NO
+  // LEÍDO (MERCADONA/LIDL/CONSUM/DELMONTE/AMETLLER), PESO NO LEÍDO (ALDI),
+  // LOTE NO LEÍDO (ANTICH) y P+X fuera de rango. Este flag NUNCA se
+  // comprobaba aquí — n8n lo calculaba bien pero el frontend lo ignoraba
+  // por completo y dejaba pasar como ¡COINCIDE! (detectado 2026-07-24 con
+  // un caso real de Ametller con EAN ilegible en foto).
+  if (data.bloqueo_ia || data.cliente === 'REINTENTAR' || data.resultado_v === 'ERROR' || data.error_sanitario) {
+    errores.push(data.mensaje_error || (data.validacion_px?.resultado ? `⚠️ ${data.validacion_px.resultado}` : 'La IA no pudo procesar la imagen. Vuelve a hacer la foto.'))
   } else {
     // Comparar cliente FLEXIBLE (uno contiene al otro) — acepta también cliente_alias
     // Ej1: OCR detecta "ALDI", la orden dice "ALDI SAGUNTO" → coinciden (substring)

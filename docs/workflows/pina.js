@@ -1,9 +1,19 @@
 /**
  * NODO: Code JavaScript - n8n PIÑA
- * Versión: 7.5 - Fix BUG real: MIX LIDL Chef Select se colaba como candidato de PIÑA CILINDRO
- * ultima_actualizacion: 2026-07-22
+ * Versión: 7.6 - EAN ilegible en foto ya no bloquea si hay clienteHint (orden)
+ * ultima_actualizacion: 2026-07-24
  * Snapshot desde n8n. NO editar aquí — la fuente de verdad es n8n.
  * Sincronizar tras cualquier cambio en el workflow.
+ *
+ * v7.6 — Motivo: defecto físico de impresión (cabezal, raya en el código de
+ *   barras) puede dejar el EAN ilegible en foto aunque el producto esté
+ *   correctamente identificado por la orden (clienteHint). Antes esto
+ *   bloqueaba siempre con "EAN NO LEÍDO" — repetir la foto no arregla un
+ *   defecto de impresión. Ahora: si hay clienteHint, no bloquea, solo avisa
+ *   (ean_no_legible_advertencia) y el escaneo físico con la pistola
+ *   confirma el EAN real contra ean_esperado_completo. Sin clienteHint
+ *   (auto-mode) se mantiene el bloqueo original. Mismo patrón ya validado
+ *   hoy en tacos-lidl.js.
  *
  * v7.5 — BUG CONFIRMADO en producción (test n8n directo): al buscar por
  *   clienteHint=LIDL sin `fase`, el filtro `esTacosSku` solo miraba si
@@ -431,10 +441,18 @@ if (clienteFinal === "MERCADONA SA" && (codigoRIA === "N/A" || !codigoRIA)) {
 // Si el producto tiene EAN en BD pero el OCR no lo leyó, bloquear.
 // Antes del cliente-hint este caso se filtraba solo (al no encontrar pDb).
 // Con cliente-hint pDb se identifica por nombre → necesitamos check explícito.
+//
+// EXCEPCIÓN (v7.6): si hay clienteHint (verify mode, la orden identifica el
+// producto con autoridad), no bloqueamos por EAN ilegible en foto — puede
+// ser un defecto de impresión (cabezal, raya en el código de barras) y no
+// un problema del producto. En su lugar avisamos (ean_no_legible_advertencia)
+// y dejamos que el escaneo físico con la pistola confirme el EAN real
+// contra ean_esperado_completo. Mismo patrón ya validado en tacos-lidl.js.
 let eanNoLeidoConBd = false;
 if (pDb && pDb.ean && String(pDb.ean).trim() !== '' && eanLimpio === "No detectado" && fase !== 'tarrina') {
   eanNoLeidoConBd = true;
 }
+const eanNoLeidoBloquea = eanNoLeidoConBd && !clienteHint;
 
 // === EAN ESPERADO COMPLETO PARA MERCADONA (peso variable / importe) ===
 // MERCADONA codifica el importe (en céntimos) dentro del EAN-13:
@@ -566,7 +584,7 @@ if (fase === 'tarrina') {
 } else if (antichSinLote) {
     val.alerta = true;
     val.mensaje = "LOTE NO LEÍDO";
-} else if (eanNoLeidoConBd) {
+} else if (eanNoLeidoBloquea) {
     val.alerta = true;
     val.mensaje = "EAN NO LEÍDO";
 } else if (mercadonaSinR) {
@@ -662,6 +680,7 @@ codigo_r: clienteFinal === "MERCADONA SA" ? codigoRIA : "",
       resultado: val.mensaje
     },
     error_sanitario: val.alerta,
+    ean_no_legible_advertencia: eanNoLeidoConBd && !eanNoLeidoBloquea,
     bloqueo_ia: false,
     fecha_informe: ahora.toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })
   }
