@@ -1,9 +1,21 @@
 /**
  * NODO: Code JavaScript - n8n PIÑA
- * Versión: 7.6 - EAN ilegible en foto ya no bloquea si hay clienteHint (orden)
- * ultima_actualizacion: 2026-07-24
+ * Versión: 7.7 - Desambiguación multi-SKU por EAN (bug real: DELMONTE COCO/PIÑA TACOS)
+ * ultima_actualizacion: 2026-08-12
  * Snapshot desde n8n. NO editar aquí — la fuente de verdad es n8n.
  * Sincronizar tras cualquier cambio en el workflow.
+ *
+ * v7.7 — BUG CONFIRMADO en producción (test n8n directo, foto real de Piña
+ *   Tacos con EAN 8721098933316 perfectamente legible): la identificación
+ *   por clienteHint elegía el primer SKU del array que matcheaba cliente+
+ *   TACOS, ignorando el EAN leído por completo. DELMONTE tiene 2 TACOS
+ *   activos (COCO id=61, PIÑA id=69) — al iterar por orden de BD (id
+ *   ascendente) siempre caía en COCO, y la barrera "producto esperado vs
+ *   detectado" bloqueaba como BOTE EQUIVOCADO un bote que en realidad era
+ *   el correcto. Fix: la desambiguación entre candidatos del mismo cliente
+ *   ahora prioriza el EAN leído (match exacto o por prefijo 7) antes de
+ *   caer al criterio "chef select" (que solo servía para LIDL, donde ambos
+ *   SKUs comparten el mismo EAN en BD y no sirve para diferenciarlos).
  *
  * v7.6 — Motivo: defecto físico de impresión (cabezal, raya en el código de
  *   barras) puede dejar el EAN ilegible en foto aunque el producto esté
@@ -359,10 +371,16 @@ if (clienteHint) {
 }
 
 // Desambiguación DENTRO del cliente cuando hay varios SKUs activos con el mismo
-// prefijo EAN (caso LIDL: PRP vs CHEF SELECT — comparten EAN base 229981000).
-// Usamos el contenido de la etiqueta OCR ("chef select") para elegir el SKU
-// correcto. Si no aparece la marca, se queda con el que ya se había elegido
-// (típicamente el PRP genérico).
+// clienteHint (caso LIDL: PRP vs CHEF SELECT — comparten EAN base 229981000;
+// caso DELMONTE: COCO TACOS 06X125 vs PIÑA TACOS 06X400 — EAN distinto).
+// v7.7: prioridad 1 = EAN leído (si es legible, es el identificador más
+// fiable — evita que .find() se quede con el primer candidato del array por
+// puro orden de BD, que es justo lo que pasaba con DELMONTE: COCO (id 61)
+// se elegía siempre antes que PIÑA (id 69) aunque la foto trajera el EAN
+// exacto de PIÑA, y la barrera de "producto esperado" bloqueaba un bote
+// que en realidad era el correcto). Prioridad 2 = texto "chef select" en
+// la etiqueta (caso LIDL, donde ambos SKUs comparten el mismo EAN en BD y
+// el EAN leído no sirve para distinguir).
 if (pDb && clienteHint) {
   const esTacosFlow = fase !== null;
   const candidatos = activos.filter(p => {
@@ -376,12 +394,21 @@ if (pDb && clienteHint) {
   }).map(p => p.json);
 
   if (candidatos.length > 1) {
-    const esChefSelect = /chef\s*select/i.test(cleanedText);
-    const desambiguado = candidatos.find(p =>
-      esChefSelect
-        ? /CHEF\s*SELECT/i.test(String(p.nombre_sap || ""))
-        : !/CHEF\s*SELECT/i.test(String(p.nombre_sap || ""))
-    );
+    let desambiguado = null;
+    if (eanLimpio !== "No detectado") {
+      desambiguado = candidatos.find(p => String(p.ean || "").trim() === eanLimpio);
+      if (!desambiguado && eanLimpio.length >= 7) {
+        desambiguado = candidatos.find(p => String(p.ean || "").substring(0, 7) === eanLimpio.substring(0, 7));
+      }
+    }
+    if (!desambiguado) {
+      const esChefSelect = /chef\s*select/i.test(cleanedText);
+      desambiguado = candidatos.find(p =>
+        esChefSelect
+          ? /CHEF\s*SELECT/i.test(String(p.nombre_sap || ""))
+          : !/CHEF\s*SELECT/i.test(String(p.nombre_sap || ""))
+      );
+    }
     if (desambiguado) {
       pDb = desambiguado;
       clienteFinal = pDb.cliente.toUpperCase();
