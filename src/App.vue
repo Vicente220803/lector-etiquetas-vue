@@ -1392,6 +1392,22 @@ const procesarRespuestaCaja = (data) => {
       return
     }
 
+    // Si la foto de caja no aporta NINGÚN dato real (EAN/DUN, lote ni fecha
+    // caducidad todos vacíos), las comprobaciones de abajo (que solo
+    // comparan cuando hay dato en los dos lados) se quedan sin nada que
+    // comprobar y la caja pasa como buena sin haber verificado nada. Pasó
+    // en producción: un operario reenvió por error la foto de la tarrina
+    // en el paso de caja y el sistema lo dio por VERIFICADA con la caja
+    // real sin fotografiar. Bloqueamos explícitamente este caso.
+    const dExtraidos = data.datos_extraidos || {}
+    const cajaSinDatos =
+      (!dExtraidos.ean || dExtraidos.ean === 'No detectado') &&
+      (!dExtraidos.lote || dExtraidos.lote === 'No detectado') &&
+      (!data.fecha_caducidad || data.fecha_caducidad === 'No detectado')
+    if (cajaSinDatos) {
+      erroresCaja.push('No se ha podido leer ningún dato de la etiqueta de la caja (ni EAN, ni lote, ni fecha de caducidad). Verifica que la foto sea de la caja de cartón (no del bote ni del film) y repite.')
+    }
+
     const matchea = (a, b) => a && b && (a.includes(b) || b.includes(a))
     const clienteCaja = (data.cliente || '').toUpperCase().trim()
     const clienteEsperado = (verifyParams.cliente || '').toUpperCase().trim()
