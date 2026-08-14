@@ -1,9 +1,18 @@
 /**
  * NODO: Code JavaScript - n8n PIÑA
- * Versión: 7.7 - Desambiguación multi-SKU por EAN (bug real: DELMONTE COCO/PIÑA TACOS)
- * ultima_actualizacion: 2026-08-12
+ * Versión: 7.8 - Bloqueo icono reciclaje con fondo amarillo (solo DELMONTE TACOS)
+ * ultima_actualizacion: 2026-08-14
  * Snapshot desde n8n. NO editar aquí — la fuente de verdad es n8n.
  * Sincronizar tras cualquier cambio en el workflow.
+ *
+ * v7.8 — Confirmado con fotos reales (Piña Tacos DELMONTE, 3 fotos
+ *   distintas el mismo día): el icono "Al Amarillo" debe imprimirse en
+ *   blanco/negro, sin relleno de color. Aparece con fondo amarillo
+ *   (pálido) de forma recurrente — defecto de impresión, no un caso
+ *   puntual. Requiere el nuevo campo ICONO_RECICLAJE_FONDO añadido al
+ *   prompt de "Analyze image" (ver instrucción pegada aparte). Bloquea
+ *   SOLO para DELMONTE + nombre_sap con "TACOS" — el resto de clientes no
+ *   se ven afectados aunque el prompt les devuelva también este campo.
  *
  * v7.7 — BUG CONFIRMADO en producción (test n8n directo, foto real de Piña
  *   Tacos con EAN 8721098933316 perfectamente legible): la identificación
@@ -544,6 +553,18 @@ if (clienteFinal === "OTROS" && /del\s*monte/i.test(cleanedText)) {
 }
 
 
+// === BARRERA SANITARIA: icono reciclaje con fondo amarillo (solo DELMONTE TACOS) ===
+// La etiqueta correcta de DELMONTE TACOS (Piña, Coco...) lleva el icono
+// "Al Amarillo" en blanco/negro, SIN relleno de color. Un fondo amarillo
+// (aunque sea pálido) es indicio de defecto de impresión — confirmado con
+// fotos reales 2026-08-14, recurrente en varios lotes. Requiere el campo
+// ICONO_RECICLAJE_FONDO del prompt (ver docs/workflows/pina-prompt.md).
+const iconoReciclajeFondo = extractValue(cleanedText, /ICONO_RECICLAJE_FONDO:\s*(AMARILLO|BLANCO|NO_DETECTADO)/i);
+let iconoReciclajeAmarilloMal = false;
+if (pDb && clienteFinal === "DELMONTE" && /TACOS/i.test(String(pDb.nombre_sap || "")) && iconoReciclajeFondo === "AMARILLO") {
+  iconoReciclajeAmarilloMal = true;
+}
+
 // === BARRERA SANITARIA: PRODUCTO esperado (padre) vs producto detectado (pDb) ===
 // El padre envía datosApp.producto = nombre_sap del producto de la orden.
 // Si el workflow ha identificado un producto distinto (bote equivocado dentro
@@ -611,6 +632,9 @@ if (fase === 'tarrina') {
 } else if (antichSinLote) {
     val.alerta = true;
     val.mensaje = "LOTE NO LEÍDO";
+} else if (iconoReciclajeAmarilloMal) {
+    val.alerta = true;
+    val.mensaje = "ICONO RECICLAJE CON FONDO AMARILLO (debe ir en blanco/negro) — posible defecto de impresión";
 } else if (eanNoLeidoBloquea) {
     val.alerta = true;
     val.mensaje = "EAN NO LEÍDO";
