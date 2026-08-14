@@ -1,9 +1,19 @@
 /**
  * NODO: Code JavaScript - n8n PIÑA
- * Versión: 7.8 - Bloqueo icono reciclaje con fondo amarillo (solo DELMONTE TACOS)
+ * Versión: 7.9 - Fix real: bloqueo icono amarillo no se comprobaba en fase=tarrina
  * ultima_actualizacion: 2026-08-14
  * Snapshot desde n8n. NO editar aquí — la fuente de verdad es n8n.
  * Sincronizar tras cualquier cambio en el workflow.
+ *
+ * v7.9 — BUG CONFIRMADO en producción (test n8n directo, misma foto real
+ *   con ICONO_RECICLAJE_FONDO: AMARILLO correctamente detectado por el
+ *   prompt): el check `iconoReciclajeAmarilloMal` de v7.8 se añadió al
+ *   `else if` de la cadena val.mensaje, pero la foto de tarrina de TACOS
+ *   entra en la rama `if (fase === 'tarrina')` de MÁS ARRIBA, que nunca
+ *   llega a evaluar ese `else if` — se quedaba solo en "¿hay pDb? → OK".
+ *   Justo la foto donde se ve el icono (junto al barcode del culo) es la
+ *   que se saltaba la comprobación. Fix: comprobar dentro de la propia
+ *   rama fase==='tarrina'.
  *
  * v7.8 — Confirmado con fotos reales (Piña Tacos DELMONTE, 3 fotos
  *   distintas el mismo día): el icono "Al Amarillo" debe imprimirse en
@@ -622,7 +632,13 @@ if (dReferencia && dCad) {
 if (fase === 'tarrina') {
     // Fase 1 TACOS: la etiqueta tarrina solo tiene marca + EAN + origen.
     // No tiene fechas, lote, peso ni P+X. Solo identificamos el producto.
-    if (pDb) {
+    // El icono "Al Amarillo" se ve precisamente en esta foto (junto al
+    // barcode) — hay que comprobarlo AQUÍ, esta rama no cae nunca en el
+    // else-if de más abajo.
+    if (pDb && iconoReciclajeAmarilloMal) {
+        val.alerta = true;
+        val.mensaje = "ICONO RECICLAJE CON FONDO AMARILLO (debe ir en blanco/negro) — posible defecto de impresión";
+    } else if (pDb) {
         val.alerta = false;
         val.mensaje = "OK (etiqueta tarrina)";
     } else {
