@@ -1,7 +1,14 @@
 /**
  * NODO: Code JavaScript - VERIFICA ETIQUETA TACOS LIDL
- * Versión: 1.9
- * ultima_actualizacion: 2026-07-23
+ * Versión: 1.10
+ * ultima_actualizacion: 2026-08-14
+ *
+ * v1.10 — Actualizados los valores nutricionales esperados del Mix con
+ *   los de la etiqueta vigente (confirmados con foto real, lote 1225,
+ *   caducidad 21/08): kJ 185→205, kcal 44→48, hidratos 10→10,8,
+ *   azúcares 9,1→0,5, proteínas 0,6→0,5. Grasas y sal sin cambios (0).
+ *   La tabla anterior estaba desactualizada — bloqueaba etiquetas
+ *   correctas como si fueran una impresión defectuosa.
  *
  * v1.9 — Aviso no bloqueante `ean_no_legible_advertencia` cuando el
  *   producto se identificó por la orden (EAN ilegible en foto, v1.8).
@@ -362,13 +369,13 @@ if (!esCoco && detectado.pictograma_no_apto_0_3 === true) {
 const esMix = /MIX/i.test(producto_bd.nombre_sap);
 if (esMix) {
   const INFO_NUTRICIONAL_MIX_ESPERADA = {
-    valor_energetico_kj: "185",
-    valor_energetico_kcal: "44",
+    valor_energetico_kj: "205",
+    valor_energetico_kcal: "48",
     grasas_g: "0",
     grasas_saturadas_g: "0",
-    hidratos_g: "10",
-    azucares_g: "9,1",
-    proteinas_g: "0,6",
+    hidratos_g: "10,8",
+    azucares_g: "0,5",
+    proteinas_g: "0,5",
     sal_g: "0"
   };
 
