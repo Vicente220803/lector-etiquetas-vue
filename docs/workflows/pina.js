@@ -1,9 +1,24 @@
 /**
  * NODO: Code JavaScript - n8n PIÑA
- * Versión: 7.9 - Fix real: bloqueo icono amarillo no se comprobaba en fase=tarrina
- * ultima_actualizacion: 2026-08-14
+ * Versión: 7.10 - Mensaje BOTE EQUIVOCADO ya no inventa producto sin confirmar por EAN
+ * ultima_actualizacion: 2026-08-18
  * Snapshot desde n8n. NO editar aquí — la fuente de verdad es n8n.
  * Sincronizar tras cualquier cambio en el workflow.
+ *
+ * v7.10 — BUG CONFIRMADO en test real: un bote de MERCADONA (Piña Rodajas)
+ *   escaneado durante una orden de DELMONTE Piña Tacos se bloqueó
+ *   correctamente (bien), pero el mensaje decía "el bote leído es COCO
+ *   TACOS 06X125 DLM" — un producto que no tenía NADA que ver con la foto
+ *   real. Causa: la IA leyó mal el EAN (insertó un "0" de más justo tras
+ *   el "2" inicial, mismo patrón que el incidente de Ametller), así que
+ *   `eanLimpio` no encajó con el prefijo de MERCADONA y no disparó la
+ *   barrera "EAN vs cliente-hint" (más arriba, más precisa). El flujo cayó
+ *   en la identificación por clienteHint, que coge el primer TACOS de
+ *   DELMONTE en BD sin relación real con el EAN leído — y el mensaje
+ *   nombraba ese producto como si fuera un hecho confirmado. Fix: el
+ *   mensaje de "BOTE EQUIVOCADO" solo nombra un producto concreto si el
+ *   EAN leído coincide de verdad con el de ese pDb; si no, avisa sin
+ *   inventarse el nombre.
  *
  * v7.9 — BUG CONFIRMADO en producción (test n8n directo, misma foto real
  *   con ICONO_RECICLAJE_FONDO: AMARILLO correctamente detectado por el
@@ -581,21 +596,36 @@ if (pDb && clienteFinal === "DELMONTE" && /TACOS/i.test(String(pDb.nombre_sap ||
 // del mismo cliente: PRP vs Chef Select, DELMONTE cilindro vs TACOS, etc.),
 // bloqueamos por riesgo sanitario de cross-verificación.
 // Sin el campo (padre no lo envía) → no bloquea, comportamiento actual.
+//
+// v7.10 — el "producto_detectado" que se muestra en el mensaje puede venir
+// de la identificación por clienteHint (que NO depende del EAN leído, solo
+// de "es el primer TACOS de este cliente en BD"). Si el EAN leído no
+// confirma realmente ese pDb concreto (ej. la IA leyó mal el barcode, o el
+// bote es de OTRO cliente y el EAN ni siquiera coincidía), nombrar un
+// producto concreto es inventarse un dato que no está confirmado — pasó en
+// real con un bote de MERCADONA durante una orden de DELMONTE: el mensaje
+// culpaba a "COCO TACOS" cuando el bote no tenía nada que ver. Ahora solo
+// se nombra el producto detectado si el EAN leído coincide de verdad con
+// el EAN de ese pDb; si no, se avisa sin inventar un nombre.
 if (datosApp.producto && pDb && pDb.nombre_sap) {
   const normalizar = (s) => String(s || "").toUpperCase().replace(/\s+/g, ' ').trim();
   const productoEsperado = normalizar(datosApp.producto);
   const productoDetectado = normalizar(pDb.nombre_sap);
 
   if (productoEsperado !== productoDetectado) {
+    const eanConfirmaProducto = eanLimpio !== "No detectado" && String(pDb.ean || "").trim() === eanLimpio;
+    const mensaje = eanConfirmaProducto
+      ? `BOTE EQUIVOCADO: la orden es "${datosApp.producto}" pero el bote leído es "${pDb.nombre_sap}". Verifica que sea el bote correcto.`
+      : `BOTE EQUIVOCADO: la orden es "${datosApp.producto}" pero el bote escaneado NO coincide (no se ha podido confirmar por EAN qué producto es exactamente — puede ser de otro cliente). Verifica manualmente el bote antes de continuar.`;
     return [{
       json: {
         bloqueo_ia: true,
         error_sanitario: true,
-        mensaje_error: `BOTE EQUIVOCADO: la orden es "${datosApp.producto}" pero el bote leído es "${pDb.nombre_sap}". Verifica que sea el bote correcto.`,
+        mensaje_error: mensaje,
         cliente: "REINTENTAR",
         debug_texto_ocr: cleanedText,
         producto_esperado: datosApp.producto,
-        producto_detectado: pDb.nombre_sap,
+        producto_detectado: eanConfirmaProducto ? pDb.nombre_sap : "No confirmado por EAN",
         cliente_hint_orden: clienteHint
       }
     }];
