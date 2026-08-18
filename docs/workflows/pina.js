@@ -1,9 +1,26 @@
 /**
  * NODO: Code JavaScript - n8n PIÑA
- * Versión: 7.10 - Mensaje BOTE EQUIVOCADO ya no inventa producto sin confirmar por EAN
+ * Versión: 7.11 - ean_esperado_completo ya no depende del texto exacto de cliente
  * ultima_actualizacion: 2026-08-18
  * Snapshot desde n8n. NO editar aquí — la fuente de verdad es n8n.
  * Sincronizar tras cualquier cambio en el workflow.
+ *
+ * v7.11 — BUG CONFIRMADO en producción (AMETLLER, verificación real marcada
+ *   VERIFICADA): tras la migración de BBDD del 17/08, el campo
+ *   `productos.cliente` de AMETLLER volvió a perder el sufijo ", S.L" (ya
+ *   había pasado antes, esta vez la migración restauró un snapshot viejo).
+ *   La rama que construye `ean_esperado_completo` (el EAN "de verdad",
+ *   calculado desde BD + precio — la red de seguridad real contra fallos
+ *   de lectura de la IA) exigía coincidencia EXACTA de `clienteFinal` con
+ *   una lista de nombres. Sin el sufijo, la condición no se cumplía y
+ *   `ean_esperado_completo` se quedaba `null` EN SILENCIO — ningún check
+ *   existente lo detectaba como error. Consecuencia real: la IA transpuso
+ *   dos dígitos del EAN leído por OCR (2103074004214 → 2103074004241) y
+ *   nadie lo pilló, porque sin la red de seguridad el sistema se fía solo
+ *   del OCR. Fix: usar `pDb.tipo_codigo_ean === "Variable precio"` (dato
+ *   del producto en BD) en vez de la lista de nombres de cliente — no
+ *   depende de cómo esté escrito el nombre, y no hace falta tocar código
+ *   si se añade un cliente nuevo de este tipo.
  *
  * v7.10 — BUG CONFIRMADO en test real: un bote de MERCADONA (Piña Rodajas)
  *   escaneado durante una orden de DELMONTE Piña Tacos se bloqueó
@@ -526,8 +543,18 @@ let aldiSinPeso = false;
 if (pDb && pDb.ean) {
   const eanBd = String(pDb.ean).trim();
 
-    // MERCADONA / LIDL / CONSUM: 9 dig BD + 3 dig importe céntimos + check
-      if ((clienteFinal === "MERCADONA SA" || clienteFinal === "LIDL SUPERMERCADOS, S.A.U" || clienteFinal === "CONSUM" || clienteFinal === "DELMONTE" || clienteFinal === "CASA AMETLLER, S.L") && eanBd.length === 9) {
+    // MERCADONA / LIDL / CONSUM / DELMONTE / AMETLLER: 9 dig BD + 3 dig importe céntimos + check
+    // v7.11: antes exigía que clienteFinal coincidiera EXACTO con una lista de
+    // nombres (ej. "CASA AMETLLER, S.L") — si el campo cliente en BD pierde el
+    // sufijo legal (ya ha pasado dos veces con AMETLLER, la última tras la
+    // migración de BBDD), esta rama dejaba de ejecutarse y ean_esperado_completo
+    // se quedaba null EN SILENCIO, sin que ningún check lo detectara — el
+    // sistema pasaba a fiarse solo del EAN leído por OCR (que puede venir mal,
+    // como pasó: la IA transpuso dos dígitos y nadie lo pilló). Usar
+    // tipo_codigo_ean (dato del propio producto en BD, no depende de cómo esté
+    // escrito el nombre del cliente) es más robusto y no requiere tocar código
+    // si se añade un cliente nuevo de este tipo.
+      if (pDb.tipo_codigo_ean === "Variable precio" && eanBd.length === 9) {
 
     const importeNum = parseFloat(String(importeExtraido).replace(',', '.'));
     if (!importeNum || importeNum <= 0 || importeNum >= 10) {
